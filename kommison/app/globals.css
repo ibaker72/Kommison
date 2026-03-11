@@ -1,16 +1,18 @@
 @import "tailwindcss";
 
 :root {
-  --background: #0A0A0A;
-  --foreground: #F5F5F5;
+  --background: #09090B;
+  --foreground: #FAFAFA;
   --muted: #888888;
   --muted-dark: #555555;
   --surface: #141414;
-  --surface-border: #1E1E1E;
-  --accent: #E2A832;
-  --accent-hover: #F0B840;
-  --font-heading: var(--font-geist);
-  --font-body: var(--font-geist);
+  --surface-hover: #1A1A1A;
+  --surface-border: #222222;
+  --accent: #F59E0B;
+  --accent-hover: #FBBF24;
+  --accent-muted: rgba(245, 158, 11, 0.12);
+  --font-heading: "Instrument Serif", Georgia, serif;
+  --font-body: "DM Sans", var(--font-geist), system-ui, sans-serif;
 }
 
 @theme inline {
@@ -19,9 +21,11 @@
   --color-muted: var(--muted);
   --color-muted-dark: var(--muted-dark);
   --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
   --color-surface-border: var(--surface-border);
   --color-accent: var(--accent);
   --color-accent-hover: var(--accent-hover);
+  --color-accent-muted: var(--accent-muted);
   --font-heading: var(--font-heading);
   --font-body: var(--font-body);
 }
@@ -33,16 +37,16 @@ html {
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-geist), system-ui, sans-serif;
+  font-family: "DM Sans", var(--font-geist), system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Scroll animations */
+/* Animations */
 @keyframes fade-up {
   from {
     opacity: 0;
-    transform: translateY(24px);
+    transform: translateY(30px);
   }
   to {
     opacity: 1;
@@ -55,12 +59,27 @@ body {
   to { opacity: 1; }
 }
 
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .animate-fade-up {
-  animation: fade-up 0.7s ease-out both;
+  animation: fade-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .animate-fade-in {
   animation: fade-in 0.6s ease-out both;
+}
+
+.animate-slide-in {
+  animation: slide-in-right 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
 .delay-100 { animation-delay: 100ms; }
@@ -69,22 +88,36 @@ body {
 .delay-400 { animation-delay: 400ms; }
 .delay-500 { animation-delay: 500ms; }
 .delay-600 { animation-delay: 600ms; }
+.delay-700 { animation-delay: 700ms; }
+.delay-800 { animation-delay: 800ms; }
 
-/* Gradient text */
-.gradient-text {
-  background: linear-gradient(135deg, #F5F5F5 0%, var(--accent) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-/* Subtle glow effect */
-.accent-glow {
-  box-shadow: 0 0 80px -20px rgba(226, 168, 50, 0.15);
+/* Heading font */
+.font-heading {
+  font-family: "Instrument Serif", Georgia, serif;
 }
 
 /* Nav blur */
 .nav-blur {
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+/* Subtle glow */
+.hero-glow {
+  background: radial-gradient(ellipse 60% 50% at 20% 50%, rgba(245, 158, 11, 0.06) 0%, transparent 70%);
+}
+
+/* Accordion transition */
+.accordion-content {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.accordion-content[data-open="true"] {
+  grid-template-rows: 1fr;
+}
+
+.accordion-inner {
+  overflow: hidden;
 }
