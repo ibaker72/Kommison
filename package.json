@@ -7,6 +7,9 @@
     "vercel-build": "npm --prefix kommison install --include=dev && npm --prefix kommison run build && rm -rf .next && cp -R kommison/.next .next"
   },
   "dependencies": {
-    "next": "16.1.6"
+    "client-only": "0.0.1",
+    "next": "16.1.6",
+    "react": "19.2.0",
+    "react-dom": "19.2.0"
   }
 }
