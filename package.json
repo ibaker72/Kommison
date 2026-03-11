@@ -1,0 +1,12 @@
+{
+  "name": "kommison-root",
+  "private": true,
+  "scripts": {
+    "dev": "cd kommison && npm run dev",
+    "build": "cd kommison && npm run build",
+    "vercel-build": "cd kommison && npm install && npm run build"
+  },
+  "dependencies": {
+    "next": "16.1.6"
+  }
+}
