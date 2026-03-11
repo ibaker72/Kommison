@@ -629,4 +629,965 @@ Give a small business owner a working referral program with partner tracking, le
 
 ---
 
-*Sections 6–15 and Final Summary to follow.*
+## SECTION 6 — USER FLOWS
+
+### Flow 1: Business Signs Up
+
+**Trigger:** Founder visits kommison.com and clicks "Get Started" or "Start Free Trial."
+
+**Steps:**
+1. User clicks CTA → lands on signup page
+2. Enters email, password, full name → submits
+3. Email verification sent → user clicks confirmation link
+4. Redirected to onboarding: enter company name, website URL, upload logo (optional)
+5. Prompted to create first referral program: program name, destination URL, commission type (flat/percentage), commission rate
+6. Success screen: "Your referral program is live. Add your first partner."
+7. Lands on dashboard with empty state prompting partner creation
+
+**System logic:**
+- Create `user` record → create `organization` record → assign user as org admin
+- Create default `referral_program` linked to org
+- Create default `commission_rule` linked to program
+- Send welcome email with quick-start guide link
+
+**Edge cases:**
+- Email already in use → show clear error, offer password reset link
+- User abandons mid-onboarding → save progress, resume on next login
+- User skips program setup → dashboard shows "Complete setup" prompt
+
+**UX cautions:**
+- Do not ask for billing info during signup (free trial or freemium first)
+- Keep onboarding to 3 screens maximum — every extra step loses users
+- Pre-fill sensible defaults (e.g., 10% commission, "Referral Program" as default name)
+- Never show an empty dashboard without clear guidance on what to do next
+
+---
+
+### Flow 2: Business Creates Referral Program
+
+**Trigger:** Admin clicks "Create Program" or completes onboarding setup.
+
+**Steps:**
+1. Admin enters program name (e.g., "Client Referral Program")
+2. Sets destination URL (where referral links redirect — e.g., their website contact page)
+3. Adds optional program description (visible to partners)
+4. Selects commission type: flat fee or percentage
+5. Enters commission rate (e.g., $200 or 10%)
+6. Selects currency (default: USD)
+7. Clicks "Create Program" → program is live
+
+**System logic:**
+- Create `referral_program` record linked to org
+- Create `commission_rule` record linked to program
+- Program is immediately active — no publish/draft workflow in v1
+- All new partners added to org are automatically linked to this program (single-program model in v1)
+
+**Edge cases:**
+- v1: Only one program per org. If a program exists, show "Edit Program" instead of "Create Program"
+- Commission rate of 0 → allow it (some businesses track referrals without paying commissions)
+- Invalid destination URL → validate format on submit, show inline error
+
+**UX cautions:**
+- Don't overload this form — 5 fields maximum
+- Show a preview of what a referral link will look like
+- Explain commission type with a one-line example: "Flat: $200 per conversion" / "Percentage: 10% of deal value"
+
+---
+
+### Flow 3: Business Adds a Referral Partner
+
+**Trigger:** Admin clicks "Add Partner" from the partners list or dashboard.
+
+**Steps:**
+1. Admin enters partner details: name (required), email (required), company (optional), phone (optional), notes (optional)
+2. Chooses whether to send an invitation email now or add silently
+3. Clicks "Add Partner"
+4. System creates partner record, generates unique referral link and code
+5. If invite selected: sends invitation email to partner
+6. Partner appears in partners list as "Invited" (if emailed) or "Active" (if added silently)
+
+**System logic:**
+- Create `partner` record linked to org
+- Generate unique referral link: `kommison.com/r/{unique_id}`
+- Generate default referral code: first name uppercase or random alphanumeric (admin can customize)
+- If inviting: create `partner_invite` record, send email with accept link
+- Log activity: "Partner [name] added by [admin]"
+
+**Edge cases:**
+- Email already exists as a partner in this org → block duplicate, show existing partner link
+- Email belongs to an existing Kommison user (partner for another business) → allow; one person can be a partner for multiple businesses
+- Admin adds partner without sending invite → partner can still be invited later
+- Invalid email format → inline validation, block submission
+
+**UX cautions:**
+- Make "Send Invite" the default but not the only option — some admins want to set up partners before notifying them
+- After adding, show the partner's referral link with a copy button so admin can share it manually if needed
+- Don't require company or phone — keep friction low
+
+---
+
+### Flow 4: Partner Receives Invite
+
+**Trigger:** Admin sends partner invitation from Kommison.
+
+**Steps:**
+1. Partner receives email: "You've been invited to join [Company]'s referral program on Kommison"
+2. Email contains: inviting company name, program description, and "Accept Invitation" button
+3. Partner clicks button → lands on partner signup page
+4. If new to Kommison: creates account (email pre-filled, sets password)
+5. If existing Kommison user: logs in and invitation is auto-accepted
+6. Redirected to partner portal dashboard showing their referral link, program details, and empty referrals list
+
+**System logic:**
+- Partner invite link contains signed token with invite ID and partner email
+- On acceptance: create partner `user` record (if new), update `partner_invite` status to `accepted`, set partner status to `active`
+- Invite token expires after 7 days — admin can resend
+- Log activity: "Partner [name] accepted invitation"
+- Send confirmation email to admin: "[Partner name] joined your referral program"
+
+**Edge cases:**
+- Partner clicks expired invite link → show friendly message with "Request a new invitation" option (triggers email to admin)
+- Partner tries to sign up with a different email than the invite → block; invite is email-specific
+- Admin revokes invitation before partner accepts → show "This invitation is no longer valid" page
+- Partner receives multiple invites from different businesses → each creates a separate partner relationship
+
+**UX cautions:**
+- The invitation email is the first impression of Kommison — it must look professional and trustworthy
+- Partner signup should require only email + password — nothing else
+- Don't make partners feel like they're signing up for "yet another tool" — frame it as "view your referrals and earnings"
+- The accept flow should take under 60 seconds from email click to portal landing
+
+---
+
+### Flow 5: Partner Shares Referral Link/Code
+
+**Trigger:** Partner wants to refer someone to the business.
+
+**Steps:**
+1. Partner logs into portal → sees referral link prominently on dashboard
+2. Clicks "Copy Link" → link copied to clipboard
+3. Shares link via email, DM, text, social media, or in conversation
+4. Alternatively: shares their referral code verbally or in writing (e.g., "Use code SARAH when you contact them")
+
+**System logic:**
+- Referral link format: `kommison.com/r/{unique_id}` → redirects to business's destination URL with tracking parameter
+- When someone clicks the link: record click event, set attribution cookie (30-day default window in v1)
+- Referral code: used for manual attribution by the admin when a lead mentions the code
+
+**Edge cases:**
+- Destination URL is down or invalid → show a branded error page, log the issue, notify admin
+- Same person clicks the link multiple times → deduplicate within 24-hour window (one referral per unique visitor per day)
+- Partner shares link on a public platform (social media) → handle high-volume clicks gracefully; attribute to first unique visitors only
+- Partner doesn't want to use a link (prefers verbal referrals) → code-based manual attribution covers this
+
+**UX cautions:**
+- The referral link must be dead simple to copy — one click, done
+- Show both link and code on the partner dashboard; let the partner choose their preferred method
+- Don't require partners to explain Kommison to the people they refer — the link should just redirect seamlessly
+- The redirect should be instant — no interstitial or splash page
+
+---
+
+### Flow 6: Lead/Customer Gets Attributed
+
+**Trigger:** Someone clicks a referral link or an admin manually logs a referral.
+
+**Steps (link-based):**
+1. Person clicks partner's referral link
+2. System records click: partner ID, timestamp, IP (hashed), user agent
+3. Redirects to business's destination URL
+4. If business has a form or contact method, lead engages
+5. Admin sees new referral in Kommison dashboard (status: `new`)
+6. Admin updates referral with lead details (name, email, notes)
+
+**Steps (manual):**
+1. A lead contacts the business and mentions a referral code or partner name
+2. Admin logs into Kommison → clicks "Add Referral"
+3. Enters lead name, email, selects referring partner, adds notes
+4. Referral created with status `new`
+
+**System logic:**
+- Link-based: create `referral` record with `source: link`, linked to partner
+- Manual: create `referral` record with `source: manual`, linked to partner
+- Referral starts at status `new` → admin can update to `contacted` → `converted` or `lost`
+- Attribution is always single-partner (no multi-touch in v1)
+
+**Edge cases:**
+- Lead was already referred by a different partner → admin decides attribution (first-touch wins by default; admin can override)
+- Admin enters a referral with no partner attribution → allow; useful for tracking unattributed referrals
+- Link click but lead never contacts the business → referral sits at `new` status; admin can archive after configurable period
+- Referral entered with incomplete info (no email) → allow; some verbal referrals have name-only initially
+
+**UX cautions:**
+- Manual referral entry should take under 30 seconds — minimize required fields
+- Show clear partner attribution on every referral record
+- Make it obvious when a referral came from a link click vs. manual entry
+- Don't auto-create referrals from every link click — wait until there's meaningful engagement or admin confirmation
+
+---
+
+### Flow 7: Commission Gets Created
+
+**Trigger:** Admin marks a referral as "converted."
+
+**Steps:**
+1. Admin opens a referral record (status: `new` or `contacted`)
+2. Clicks "Mark as Converted"
+3. If commission type is percentage: system prompts for deal value (e.g., "Enter the deal value: $5,000")
+4. If commission type is flat fee: no additional input needed
+5. System calculates commission based on program rules
+6. Commission record created with status `pending`
+7. Commission amount displayed on referral detail and partner's portal
+8. Admin and partner notified
+
+**System logic:**
+- On conversion: create `conversion` record linked to referral
+- Calculate commission: flat fee → use program rate directly; percentage → multiply deal value by rate
+- Create `commission` record: amount, status `pending`, linked to conversion + partner
+- Log activity: "Referral [lead name] converted. Commission of $[amount] created for [partner name]"
+- Send email to partner: "Your referral [lead name] has converted! Commission: $[amount]"
+
+**Edge cases:**
+- Admin marks as converted but enters $0 deal value → commission calculates as $0; allow it (some referrals are tracked for goodwill, not payment)
+- Admin wants to override the calculated commission → allow manual adjustment with a note explaining the change
+- Referral already marked as converted → prevent double conversion; show "Already converted" state
+- Commission rule changed after referral was created → use the rule that was active at time of conversion (snapshot the rate)
+
+**UX cautions:**
+- The "Mark as Converted" action should feel deliberate — confirm with a modal: "This will create a $[amount] commission for [partner]. Continue?"
+- Show the calculated commission amount before the admin confirms
+- If percentage-based, the deal value input must be prominent and clearly labeled
+- After conversion, the referral detail should show the complete chain: referral → conversion → commission
+
+---
+
+### Flow 8: Business Reviews and Approves Payout
+
+**Trigger:** Admin reviews pending commissions and decides to approve for payment.
+
+**Steps:**
+1. Admin navigates to Commissions/Payouts page
+2. Sees list of commissions filtered by status: `pending` (default view)
+3. Reviews individual commission: referral details, partner, amount, date
+4. Clicks "Approve" on a commission → status changes to `approved`
+5. Alternatively: selects multiple commissions and batch approves (v1.5)
+6. Approved commissions appear in the "Ready to Pay" view
+
+**System logic:**
+- Update commission status from `pending` to `approved`
+- Log activity: "Commission of $[amount] for [partner] approved by [admin]"
+- Send email to partner: "Your commission of $[amount] has been approved and is queued for payment"
+- Update partner's portal: commission moves from "Pending" to "Approved"
+
+**Edge cases:**
+- Admin wants to reject a commission → allow with required note (status: `rejected`); notify partner with reason
+- Admin approves then wants to undo → allow reversal back to `pending` within 24 hours (before payout)
+- Large number of pending commissions → provide sort/filter by partner, date, amount
+- Commission amount was manually overridden → show original calculated amount alongside override with admin note
+
+**UX cautions:**
+- Default the Payouts page to show "Pending" commissions — this is the admin's action queue
+- Show a running total at the top: "Total pending: $X,XXX across Y commissions"
+- Make the approve action quick but not accidental — single click with inline confirmation, not a multi-step flow
+- After approving, keep the user on the same page (don't redirect) so they can continue reviewing
+
+---
+
+### Flow 9: Payout Marked as Paid
+
+**Trigger:** Admin has paid the partner externally (Venmo, PayPal, bank transfer, check) and returns to Kommison to record it.
+
+**Steps:**
+1. Admin navigates to Commissions/Payouts page, filters to "Approved" status
+2. Finds the commission(s) for the partner they just paid
+3. Clicks "Mark as Paid"
+4. Optional: enters payment reference (e.g., "Venmo 3/15", "Check #4521", "PayPal txn ABC123")
+5. Optional: enters payment date (defaults to today)
+6. Commission status changes to `paid`
+7. Partner notified via email
+
+**System logic:**
+- Update commission status from `approved` to `paid`
+- Record payment reference and payment date
+- Log activity: "Commission of $[amount] paid to [partner]. Ref: [reference]"
+- Send email to partner: "You've been paid $[amount] for your referral of [lead name]"
+- Update partner portal: commission moves to "Paid" with payment date
+
+**Edge cases:**
+- Admin wants to mark multiple commissions as paid at once (paid in a single batch) → v1: one at a time; v1.5: batch payout with single reference
+- Admin marks as paid by mistake → allow reversal back to `approved` within 48 hours
+- Partner disputes that payment was received → activity log provides evidence; admin can add notes to commission record
+- Payment reference is empty → allow; not all payment methods generate reference numbers
+
+**UX cautions:**
+- This is a recording action, not a payment action — make it clear that Kommison is not sending money (in v1)
+- The payment reference field is valuable for reconciliation — encourage but don't require it
+- After marking as paid, show a subtle success state but keep the user in flow to mark other payouts
+- Show a "Recently Paid" section so admins can verify what they just recorded
+
+---
+
+### Flow 10: Partner Views Earnings Dashboard
+
+**Trigger:** Partner logs into the Kommison partner portal.
+
+**Steps:**
+1. Partner navigates to portal login page (direct URL or link from email notification)
+2. Logs in with email + password or magic link
+3. Lands on partner dashboard
+
+**Dashboard displays:**
+4. Earnings summary cards: Total Earned (all time), Pending, Approved (awaiting payment), Paid
+5. Referral link with one-click copy button
+6. Referral code displayed
+7. Recent referrals list: lead name (or "Anonymous"), date, status (new / contacted / converted / lost)
+8. Recent commissions: amount, referral reference, status (pending / approved / paid), date
+
+**Steps (continued):**
+9. Partner can click into "My Referrals" for full list with filters
+10. Partner can click into "My Earnings" for complete earnings history
+11. Partner copies referral link and continues referring
+
+**System logic:**
+- Partner portal queries only data scoped to their `partner_id` and `organization_id` (RLS enforced)
+- Earnings calculations are real-time aggregations from `commissions` table
+- Referral details shown to partner are limited: no deal values, no admin notes, no other partners' data
+- Session timeout after 30 days of inactivity
+
+**Edge cases:**
+- Partner is associated with multiple businesses → portal shows a switcher or separate dashboard per business
+- Partner has zero referrals → show encouraging empty state: "Share your referral link to get started. You'll see your referrals and earnings here."
+- Partner forgets password → standard password reset flow via email
+- Partner's account is archived by admin → login blocked with message: "Your account is no longer active. Contact [business name] for details."
+
+**UX cautions:**
+- The portal must load fast and show earnings immediately — this is what partners care about most
+- Don't show data the partner doesn't need (admin notes, other partners, business settings)
+- The referral link should be the most prominent element on the dashboard — it's the primary action driver
+- Earnings should be broken down clearly: what's coming (pending), what's confirmed (approved), and what's in the bank (paid)
+- Design for trust: show precise dates, amounts, and statuses so partners never feel like they're in the dark
+
+---
+
+## SECTION 7 — INFORMATION ARCHITECTURE
+
+### Marketing Site
+
+```
+kommison.com/
+├── / (Homepage)
+│   Purpose: Convert visitors to signups
+│   Content: Hero headline, feature overview, how it works, social proof, pricing teaser, CTA
+│
+├── /pricing
+│   Purpose: Communicate value and tiers, drive signup decision
+│   Content: Tier comparison table, feature breakdown, FAQ, annual vs monthly toggle, CTA
+│
+├── /features
+│   Purpose: Detailed feature walkthrough for evaluation-stage visitors
+│   Content: Feature sections with descriptions, screenshots/mockups, use case examples
+│
+├── /use-cases (optional, v1.5)
+│   Purpose: Speak to specific ICPs (agencies, freelancers, local businesses)
+│   Content: ICP-specific pain points, tailored feature highlights, relevant testimonials
+│
+├── /about
+│   Purpose: Build trust, show the builder
+│   Content: Founder story, connection to Bedrock Alliance / TweakAndBuild, mission
+│
+├── /blog (v1.5)
+│   Purpose: SEO and content marketing
+│   Content: Articles on referral programs, commission tracking, partner management
+│
+├── /login
+│   Purpose: Existing user login
+│   Content: Email + password form, magic link option, "Forgot password" link
+│
+├── /signup
+│   Purpose: New user registration
+│   Content: Email + password form, terms acceptance, social signup (optional)
+│
+├── /legal/privacy
+│   Purpose: Legal compliance
+│   Content: Privacy policy
+│
+└── /legal/terms
+    Purpose: Legal compliance
+    Content: Terms of service
+```
+
+### Logged-In Admin App
+
+```
+app.kommison.com/
+├── /dashboard
+│   Purpose: Overview of referral program health and recent activity
+│   Content: Summary stat cards, recent activity feed, quick actions (add partner, log referral)
+│
+├── /partners
+│   Purpose: Manage all referral partners
+│   Content: Partner list (searchable, filterable by status), "Add Partner" button
+│
+│   └── /partners/[id]
+│       Purpose: Full detail on a single partner
+│       Content: Partner info, their referrals list, their commissions, their earnings summary, activity log
+│
+├── /referrals
+│   Purpose: View and manage all referred leads
+│   Content: Referral list (filterable by status, partner, date), "Add Referral" button
+│
+│   └── /referrals/[id]
+│       Purpose: Full detail on a single referral
+│       Content: Lead info, referring partner, status workflow, conversion details, commission info, activity log
+│
+├── /commissions
+│   Purpose: Review, approve, and track all commissions and payouts
+│   Content: Commission list (filterable by status: pending/approved/paid/rejected), totals summary, approve/pay actions
+│
+├── /settings
+│   Purpose: Configure program and account
+│   Content: Company info, program settings, commission defaults, account settings
+│
+│   ├── /settings/program
+│   │   Content: Program name, description, destination URL, commission rules
+│   │
+│   ├── /settings/company
+│   │   Content: Company name, logo, website
+│   │
+│   └── /settings/account
+│       Content: Email, password change, danger zone (delete account)
+│
+└── /activity
+    Purpose: Global audit trail (v1.5 — inline on dashboard in v1)
+    Content: Chronological event log, filterable by type, partner, date
+```
+
+### Partner Portal
+
+```
+portal.kommison.com/ (or app.kommison.com/portal/)
+├── /portal/login
+│   Purpose: Partner authentication
+│   Content: Email + password form, magic link option
+│
+├── /portal/dashboard
+│   Purpose: At-a-glance earnings and referral link access
+│   Content: Earnings summary cards, referral link with copy button, referral code, recent referrals, recent commissions
+│
+├── /portal/referrals
+│   Purpose: Full list of partner's referrals
+│   Content: Referral list with status (new/contacted/converted/lost), date, lead name
+│
+├── /portal/earnings
+│   Purpose: Detailed earnings breakdown
+│   Content: Commissions list (pending/approved/paid), totals, payment history
+│
+└── /portal/account
+    Purpose: Partner account management
+    Content: Update name, email, password
+```
+
+---
+
+## SECTION 8 — DASHBOARD & UI DIRECTION
+
+### Visual Direction
+
+**Layout philosophy:** Content-first, generous spacing, structured grids. Two-column layouts where appropriate (sidebar navigation + main content). Cards for summary data, tables for lists. No clutter, no decoration that doesn't serve function.
+
+**Color system:**
+- Primary: Deep navy or charcoal — conveys trust and professionalism
+- Accent: A single vibrant color (teal, blue, or green) for CTAs, active states, and positive indicators
+- Semantic: Green for paid/success, amber for pending/warning, red for rejected/error, gray for archived/inactive
+- Background: Off-white or very light gray — not pure white (reduces eye strain)
+- Text: Near-black for primary, medium gray for secondary, light gray for tertiary
+
+**Typography:** One font family. Inter, Geist, or similar clean sans-serif. Three weights maximum (regular, medium, semibold). Tight line heights for data-heavy content, relaxed for marketing copy.
+
+**Iconography:** Minimal, functional icons. Lucide or similar clean icon set. Never decorative — every icon should aid comprehension.
+
+### Navigation Model
+
+**Admin app:** Left sidebar navigation (collapsed on mobile). Top-level items: Dashboard, Partners, Referrals, Commissions, Settings. Active state clearly indicated. No mega-menus or dropdowns — five items is enough.
+
+**Partner portal:** Simplified top navigation bar. Items: Dashboard, My Referrals, My Earnings, Account. No sidebar needed — the portal is lightweight.
+
+### Data Density Approach
+
+- **Dashboard:** Low density. Cards with single key metrics. Quick scan in 3 seconds.
+- **List pages:** Medium density. Tables with essential columns, clean row spacing. No horizontal scroll on desktop.
+- **Detail pages:** Medium-high density. All relevant data visible without tabs in most cases. Use sections, not tabs, to organize (tabs hide information).
+
+### Card Structure
+
+Summary cards follow a consistent pattern:
+- **Label** (top, small, secondary text): "Total Referrals"
+- **Value** (center, large, primary text): "47"
+- **Context** (bottom, small, tertiary text): "↑ 12 this month" or "Since Jan 2026"
+
+Cards are not clickable unless they navigate somewhere meaningful. No hover effects on static cards.
+
+### Interaction Patterns
+
+- **Status changes:** Inline buttons with confirmation (e.g., "Approve" → "Are you sure?" inline, not a modal)
+- **Create/edit forms:** Slide-over panels from the right, not separate pages (keeps context visible)
+- **Destructive actions:** Modal confirmation with explicit text: "Type 'DELETE' to confirm"
+- **Copy actions:** One-click copy with brief toast confirmation: "Link copied"
+- **Filters:** Persistent filter bar above tables, not hidden in a filter dropdown
+- **Search:** Global search on list pages, auto-filtering as you type
+
+### Empty States Strategy
+
+Every empty state has three elements:
+1. **Illustration or icon** (subtle, not cartoonish)
+2. **Clear message** explaining what goes here: "No referrals yet"
+3. **Primary action** to resolve the empty state: "Add your first referral" (button)
+
+Empty states should never feel like errors. They should feel like a starting point.
+
+### Trust Signals (UI)
+
+- Precise timestamps on all records ("Mar 11, 2026 at 2:34 PM", not "2 days ago")
+- Visible activity log showing every action
+- Clear attribution on every referral: who referred, when, how
+- Consistent status labels with color coding
+- No data hidden behind unnecessary clicks — partners should see everything relevant to them immediately
+
+### Dashboard Widgets (Admin)
+
+1. **Stat cards row:** Active Partners | Referrals This Month | Conversions This Month | Pending Payouts ($)
+2. **Recent Activity feed:** Last 10 events (partner added, referral created, commission approved, payout marked, etc.)
+3. **Pending Actions card:** Count of commissions awaiting approval, with "Review" link
+4. **Top Partners mini-list:** Top 5 partners by conversions this month (name + count)
+5. **Quick Actions:** "Add Partner" and "Log Referral" buttons always accessible
+
+### First-Time User Experience
+
+1. **Post-signup:** Onboarding stepper (3 steps max): Set up company → Create program → Add first partner
+2. **Empty dashboard:** Contextual empty state with checklist: "Get started with Kommison" — check off: ✓ Program created, ○ First partner added, ○ First referral tracked
+3. **First partner added:** Toast: "Your first partner is set up. Share their referral link to start tracking."
+4. **First referral logged:** Celebration moment (subtle): "Your first referral is being tracked!"
+5. **First commission created:** Dashboard updates with real data, empty states disappear naturally
+
+No product tours. No tooltip walkthroughs. The UI should be self-evident. If it needs a tour, the design needs work.
+
+### Screen List with Purpose and Key Elements
+
+**1. Marketing Homepage**
+- Purpose: Convert visitors to signups
+- Key elements: Hero section (headline + subheadline + CTA), 3-feature highlight strip, "How it works" (3-step visual), social proof section, pricing teaser, final CTA
+
+**2. Pricing Page**
+- Purpose: Drive tier selection and signup
+- Key elements: 2–3 tier cards with feature comparison, recommended tier highlighted, annual/monthly toggle, FAQ section, "Start Free Trial" CTA per tier
+
+**3. Login / Signup**
+- Purpose: Authentication
+- Key elements: Clean centered card, email + password fields, toggle between login/signup, "Forgot password" link, optional magic link, terms checkbox on signup
+
+**4. Onboarding**
+- Purpose: Get user to a functional state in under 3 minutes
+- Key elements: 3-step stepper, company info form (step 1), program setup form (step 2), add first partner prompt (step 3), skip option on step 3
+
+**5. Dashboard Overview (Admin)**
+- Purpose: Daily command center
+- Key elements: 4 stat cards, recent activity feed, pending actions prompt, top partners list, quick action buttons
+
+**6. Partners List**
+- Purpose: View and manage all referral partners
+- Key elements: Searchable table (name, email, company, status, referrals count, total earned), "Add Partner" button, status filter tabs (all / active / invited / archived)
+
+**7. Partner Detail**
+- Purpose: Full view of one partner's referral activity
+- Key elements: Partner info header (name, email, company, status, referral link), their referrals table, their commissions/earnings summary, activity log for this partner, action buttons (edit, archive, resend invite)
+
+**8. Referrals List**
+- Purpose: View and manage all referred leads
+- Key elements: Table (lead name, referring partner, source type, status, date, commission), "Add Referral" button, filters (status, partner, date range)
+
+**9. Referral Detail**
+- Purpose: Full referral lifecycle view
+- Key elements: Lead info (name, email, notes), referring partner with link, status workflow buttons (new → contacted → converted/lost), conversion details (deal value, date), commission info (amount, status), activity log
+
+**10. Commissions / Payouts**
+- Purpose: Financial management of commissions
+- Key elements: Status filter tabs (pending / approved / paid / rejected), commission table (partner, referral, amount, status, date), totals summary bar, approve/pay action buttons, payment reference input
+
+**11. Settings**
+- Purpose: Program and account configuration
+- Key elements: Tabbed or sectioned layout: Company Info, Program Settings, Commission Rules, Account, with save buttons per section
+
+**12. Partner Portal — Dashboard**
+- Purpose: Partner's home base
+- Key elements: Earnings summary cards (total earned, pending, approved, paid), referral link with copy button, referral code, recent referrals list, recent commissions list
+
+**13. Partner Portal — My Referrals**
+- Purpose: Partner views all their referrals
+- Key elements: Table (lead name or "Referral #X", date, status), status filter, no edit capability
+
+**14. Partner Portal — My Earnings**
+- Purpose: Partner views complete earnings history
+- Key elements: Commissions table (amount, referral, status, payment date), totals summary, filterable by status and date range
+
+---
+
+## SECTION 9 — DATA MODEL
+
+### Multi-Tenancy Approach
+
+Kommison uses **organization-based multi-tenancy** on a shared Postgres database. Every tenant-scoped table includes an `organization_id` column. Supabase Row Level Security (RLS) policies enforce data isolation — no query from one organization can access another's data. There is no schema-per-tenant or database-per-tenant; the shared model is simpler, cheaper, and sufficient at SMB scale.
+
+### RLS Strategy (High Level)
+
+- **Admin users:** Can read/write all data within their own `organization_id`. RLS policies check that `auth.uid()` maps to a user record with a matching `organization_id`.
+- **Partner users:** Can only read data scoped to their `partner_id` AND the relevant `organization_id`. Partners cannot see other partners' data, admin notes, deal values, or business settings. RLS policies check both `partner_id` and `organization_id`.
+- **Unauthenticated (referral link clicks):** Only the referral link resolution endpoint is publicly accessible. It reads the `partner` and `referral_program` records needed to redirect and log the click. No other data is exposed.
+
+### Admin vs Partner Access Logic
+
+| Data | Admin Access | Partner Access |
+|------|-------------|----------------|
+| Organization settings | Read/Write | None |
+| Program settings | Read/Write | Read (name, description only) |
+| All partners | Read/Write | None (only sees own profile) |
+| All referrals | Read/Write | Own referrals only (limited fields) |
+| All commissions | Read/Write | Own commissions only (no deal values) |
+| Activity log | Read (all) | None (v1); own activity (v2) |
+| Payout records | Read/Write | Own payouts only |
+
+### What Should Be Auditable
+
+Every state change that involves money, attribution, or access:
+- Partner created, updated, archived, reactivated
+- Referral created, attributed, status changed, reassigned
+- Conversion logged, deal value entered or changed
+- Commission calculated, manually overridden, approved, rejected, reversed
+- Payout marked as paid, reversed
+- Commission rule created, updated
+- Admin account changes (email, password)
+- Partner invite sent, accepted, revoked
+
+### Entity Definitions
+
+---
+
+#### `users`
+**Purpose:** Authentication and identity for all users (admins and partners).
+
+| Field | Type | Notes |
+|-------|------|-------|
+| id | uuid (PK) | Supabase Auth UID |
+| email | text | Unique, from Supabase Auth |
+| full_name | text | Display name |
+| role | enum | `admin` or `partner` |
+| avatar_url | text | Optional |
+| created_at | timestamptz | |
+| updated_at | timestamptz | |
+
+**Relationships:** One user → one or more `organization_members` (admin) or one or more `partners` (partner role).
+
+---
+
+#### `organizations`
+**Purpose:** Tenant container. Every business using Kommison is an organization.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| id | uuid (PK) | |
+| name | text | Company name |
+| slug | text | Unique, URL-safe identifier |
+| website_url | text | Optional |
+| logo_url | text | Optional |
+| currency | text | Default: "USD" |
+| created_by | uuid (FK → users) | Founding admin |
+| created_at | timestamptz | |
+| updated_at | timestamptz | |
+
+**Relationships:** One org → many programs, partners, referrals, commissions, payouts.
+
+---
+
+#### `referral_programs`
+**Purpose:** Defines a referral program's settings and destination. One per org in v1.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| id | uuid (PK) | |
+| organization_id | uuid (FK → organizations) | |
+| name | text | e.g., "Client Referral Program" |
+| description | text | Visible to partners |
+| destination_url | text | Where referral links redirect |
+| is_active | boolean | Default: true |
+| created_at | timestamptz | |
+| updated_at | timestamptz | |
+
+**Relationships:** One program → one commission_rule (v1), many partners, many referrals.
+
+---
+
+#### `partners`
+**Purpose:** Represents a referral partner within an organization.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| id | uuid (PK) | |
+| organization_id | uuid (FK → organizations) | |
+| user_id | uuid (FK → users) | Nullable until partner accepts invite |
+| referral_program_id | uuid (FK → referral_programs) | |
+| name | text | Partner's display name |
+| email | text | |
+| company | text | Optional |
+| phone | text | Optional |
+| notes | text | Admin-only, not visible to partner |
+| referral_code | text | Unique within org (e.g., "SARAH") |
+| referral_link_id | text | Unique identifier for link URL |
+| status | enum | `invited`, `active`, `archived` |
+| created_at | timestamptz | |
+| updated_at | timestamptz | |
+
+**Relationships:** One partner → many referrals, many commissions. Belongs to one org and one program.
+
+---
+
+#### `partner_invites`
+**Purpose:** Tracks invitation lifecycle for partner onboarding.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| id | uuid (PK) | |
+| organization_id | uuid (FK → organizations) | |
+| partner_id | uuid (FK → partners) | |
+| email | text | |
+| token | text | Signed, unique invite token |
+| status | enum | `pending`, `accepted`, `expired`, `revoked` |
+| expires_at | timestamptz | Default: 7 days from creation |
+| accepted_at | timestamptz | Nullable |
+| created_at | timestamptz | |
+
+**Relationships:** Belongs to one partner and one org.
+
+---
+
+#### `referrals`
+**Purpose:** A referred lead — the core tracking unit. Created when someone clicks a referral link or an admin logs a referral manually.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| id | uuid (PK) | |
+| organization_id | uuid (FK → organizations) | |
+| referral_program_id | uuid (FK → referral_programs) | |
+| partner_id | uuid (FK → partners) | Nullable (unattributed referrals) |
+| lead_name | text | Optional |
+| lead_email | text | Optional |
+| lead_phone | text | Optional |
+| notes | text | Admin-only |
+| source | enum | `link`, `code`, `manual` |
+| status | enum | `new`, `contacted`, `converted`, `lost` |
+| referred_at | timestamptz | When the referral event occurred |
+| created_at | timestamptz | |
+| updated_at | timestamptz | |
+
+**Relationships:** Belongs to one partner (usually), one program, one org. Has zero or one conversion.
+
+---
+
+#### `conversions`
+**Purpose:** Records when a referral converts to a paying customer or closed deal.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| id | uuid (PK) | |
+| organization_id | uuid (FK → organizations) | |
+| referral_id | uuid (FK → referrals) | Unique (one conversion per referral) |
+| deal_value | decimal | Revenue amount (for percentage commissions) |
+| converted_at | timestamptz | When the conversion happened |
+| notes | text | Optional, admin-only |
+| created_at | timestamptz | |
+
+**Relationships:** Belongs to one referral. Triggers commission creation.
+
+---
+
+#### `commission_rules`
+**Purpose:** Defines how commissions are calculated for a referral program.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| id | uuid (PK) | |
+| organization_id | uuid (FK → organizations) | |
+| referral_program_id | uuid (FK → referral_programs) | |
+| type | enum | `flat`, `percentage` |
+| rate | decimal | Dollar amount (flat) or percentage (e.g., 10.00 = 10%) |
+| currency | text | Inherited from org default |
+| created_at | timestamptz | |
+| updated_at | timestamptz | |
+
+**Relationships:** Belongs to one program. Applied when commissions are calculated.
+
+---
+
+#### `commissions`
+**Purpose:** A calculated commission owed to a partner for a converted referral.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| id | uuid (PK) | |
+| organization_id | uuid (FK → organizations) | |
+| partner_id | uuid (FK → partners) | |
+| conversion_id | uuid (FK → conversions) | |
+| commission_rule_id | uuid (FK → commission_rules) | Rule used at time of calculation |
+| amount | decimal | Calculated or manually overridden |
+| original_amount | decimal | System-calculated amount (before any override) |
+| currency | text | |
+| status | enum | `pending`, `approved`, `paid`, `rejected` |
+| override_note | text | Reason for manual adjustment, if any |
+| approved_at | timestamptz | Nullable |
+| paid_at | timestamptz | Nullable |
+| created_at | timestamptz | |
+| updated_at | timestamptz | |
+
+**Relationships:** Belongs to one partner, one conversion, one commission rule. Has zero or one payout.
+
+---
+
+#### `payouts`
+**Purpose:** Records the actual payment event when a commission is paid to a partner.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| id | uuid (PK) | |
+| organization_id | uuid (FK → organizations) | |
+| commission_id | uuid (FK → commissions) | |
+| partner_id | uuid (FK → partners) | |
+| amount | decimal | Should match commission amount |
+| payment_method | text | Optional (e.g., "Venmo", "PayPal", "Bank Transfer") |
+| payment_reference | text | Optional (e.g., transaction ID, check number) |
+| paid_at | timestamptz | When payment was made |
+| notes | text | Optional |
+| created_at | timestamptz | |
+
+**Relationships:** Belongs to one commission and one partner. One-to-one with commission in v1.
+
+---
+
+#### `activity_logs`
+**Purpose:** Immutable audit trail of all significant actions in the system.
+
+| Field | Type | Notes |
+|-------|------|-------|
+| id | uuid (PK) | |
+| organization_id | uuid (FK → organizations) | |
+| actor_id | uuid (FK → users) | Nullable (system actions have no actor) |
+| actor_type | enum | `admin`, `partner`, `system` |
+| action | text | e.g., "partner.created", "commission.approved", "payout.completed" |
+| entity_type | text | e.g., "partner", "referral", "commission" |
+| entity_id | uuid | ID of the affected record |
+| metadata | jsonb | Old/new values, additional context |
+| created_at | timestamptz | Immutable — no updated_at |
+
+**Relationships:** Belongs to one org. References any entity by type + ID (polymorphic).
+
+---
+
+## SECTION 10 — BILLING & MONETIZATION
+
+### Pricing Strategy Rationale
+
+Kommison's pricing should follow three principles:
+
+1. **Value-anchored, not cost-anchored.** The product saves time, prevents lost referrals, and systematizes revenue. Pricing should reflect that value, not the cost of running a Supabase database.
+2. **Simple and predictable.** Small business owners hate surprise charges. No per-referral fees, no usage metering, no overages. Flat monthly pricing with clear tier boundaries.
+3. **Grow-with-me tiers.** The free/starter tier gets users in. The mid-tier captures the core ICP. The upper tier exists for businesses that scale their referral programs. Each tier upgrade should feel natural, not punitive.
+
+### Recommended Tiers
+
+#### Free (Starter)
+**Price:** $0/mo
+**Purpose:** Remove signup friction, let users prove value before paying
+
+| Feature | Limit |
+|---------|-------|
+| Referral programs | 1 |
+| Active partners | 3 |
+| Referrals tracked | 25/month |
+| Commissions & payouts | Full tracking |
+| Partner portal | Yes |
+| Email notifications | Yes |
+| Activity log | Last 30 days |
+| Support | Community / docs |
+
+#### Pro
+**Price:** $39/mo ($29/mo annual)
+**Purpose:** Core tier for the primary ICP — agencies, freelancers, consultants
+
+| Feature | Limit |
+|---------|-------|
+| Referral programs | 1 |
+| Active partners | 25 |
+| Referrals tracked | Unlimited |
+| Commissions & payouts | Full tracking |
+| Partner portal | Yes, with company branding |
+| Email notifications | Yes |
+| Activity log | Full history |
+| Analytics | Basic dashboard |
+| CSV export | Yes |
+| Support | Email, 48-hour response |
+
+#### Business
+**Price:** $79/mo ($59/mo annual)
+**Purpose:** Growing businesses with mature referral programs
+
+| Feature | Limit |
+|---------|-------|
+| Referral programs | 5 |
+| Active partners | Unlimited |
+| Referrals tracked | Unlimited |
+| Commissions & payouts | Full tracking |
+| Partner portal | Full branding + custom domain (v2) |
+| Team members | Up to 5 |
+| Custom commission rules per partner | Yes |
+| Advanced analytics | Yes |
+| API access (v2) | Yes |
+| Priority support | Email, 24-hour response |
+
+### Free Trial vs Free Plan Recommendation
+
+**Use a free plan (freemium), not a free trial.**
+
+Rationale:
+- Small business referral programs ramp slowly. A 14-day trial doesn't give enough time to see value — a business might add 2 partners and get 1 referral in two weeks. That's not enough to justify a purchase.
+- A free plan with real limits (3 partners, 25 referrals/mo) lets users run a small but functional referral program indefinitely. When they hit the limit, they upgrade because the product has already proven itself.
+- The free plan also serves as a permanent marketing channel: every partner portal login shows "Powered by Kommison," driving awareness.
+- Free trials create urgency that works for high-velocity products (project management, design tools). Referral tracking is low-velocity — value compounds over weeks and months, not days.
+
+### How to Avoid Underpricing
+
+- **Never price below $29/mo for the paid tier.** Below that, the product signals "tool" not "platform." Customers who pay $9/mo expect a utility; customers who pay $39/mo expect a solution.
+- **Anchor against the cost of lost referrals, not the cost of software.** One missed $2,000 referral commission pays for 4+ years of Kommison. Frame pricing in that context.
+- **Don't discount for early users.** Offer a free plan instead. Early users who pay full price validate the price point. Discounting creates an anchor that's hard to raise later.
+- **Annual pricing discount should be modest: 25% max.** Don't give away 40–50% for annual commitments until churn data proves it's necessary.
+
+### Expansion Revenue Opportunities
+
+1. **Tier upgrades:** Free → Pro → Business as referral programs grow (natural expansion as partner count increases)
+2. **Seat-based expansion:** Additional team members beyond tier limits ($10/seat/mo)
+3. **Stripe Connect processing fees:** When automated payouts launch, take a small markup on payment processing (e.g., 1% on top of Stripe's fees)
+4. **Add-on: Custom domain for referral links** ($10/mo)
+5. **Add-on: White-label partner portal** ($20/mo)
+6. **Add-on: API access on Pro tier** ($15/mo, included in Business)
+7. **Future: Kommison for Teams / Agency plan** ($149/mo) — multi-org management for agencies that run referral programs for clients
+
+### Best Starting Price for Early Traction
+
+**$39/mo for Pro (launch price = regular price).**
+
+Why $39:
+- It's above the psychological "cheap tool" threshold ($9–$19/mo) but below the "I need to think about it" threshold ($99+/mo)
+- For an agency paying $2K+/quarter in referral commissions, $39/mo is instantly justifiable
+- It matches the pricing range of comparable SMB tools the ICP already uses (Calendly Pro: $16/mo, ConvertKit Creator: $29/mo, Dubsado Starter: $20/mo)
+- There's room to raise to $49 later without sticker shock, but no need to start low and anchor incorrectly
+- The free plan handles the "let me try it first" crowd — no need to undercut Pro pricing for trial purposes
+
+---
+
+*Sections 11–15 and Final Summary to follow.*
