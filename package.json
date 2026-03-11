@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "cd kommison && npm run dev",
     "build": "cd kommison && npm run build",
-    "vercel-build": "npm --prefix kommison install --include=dev && npm --prefix kommison run build && rm -rf .next && cp -R kommison/.next .next"
+    "vercel-build": "npm install --include=dev && npm --prefix kommison install --include=dev && npm --prefix kommison run build && rm -rf .next && cp -R kommison/.next .next && ln -sfn \"$PWD/node_modules\" ../node_modules"
   },
   "dependencies": {
     "client-only": "0.0.1",
