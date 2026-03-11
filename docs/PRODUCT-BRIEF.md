@@ -1590,4 +1590,420 @@ Why $39:
 
 ---
 
-*Sections 11–15 and Final Summary to follow.*
+## SECTION 11 — COMPETITIVE POSITIONING
+
+### What Users Will Compare Kommison To
+
+**1. Spreadsheets (Google Sheets, Excel, Notion tables)**
+The default "tool" for most SMBs tracking referrals today. Free, familiar, and already in use. Kommison's real competitor isn't another SaaS — it's the spreadsheet. Every positioning decision should address why Kommison is worth $39/mo over a free spreadsheet.
+
+**2. Enterprise affiliate/partner platforms (PartnerStack, Impact, Refersion, Tapfiliate)**
+Built for e-commerce brands or SaaS companies with hundreds or thousands of affiliates. Complex onboarding, feature-heavy dashboards, pricing that starts at $500+/mo or takes a revenue cut. These tools are overbuilt and overpriced for the SMB ICP.
+
+**3. E-commerce affiliate tools (GoAffPro, ReferralCandy, Affiliatly)**
+Tightly integrated with Shopify/WooCommerce. Built for product-based businesses, not service businesses. Commission models assume cart-based transactions, not project-based deals or manual conversions. Wrong category entirely for Kommison's ICP.
+
+**4. Referral marketing platforms (ReferralRock, GrowSurf, Viral Loops)**
+Closer to Kommison's space but oriented toward consumer referral programs (refer-a-friend, double-sided rewards). Built for B2C with widget-heavy implementations. More marketing tool than operational tool.
+
+**5. CRM with referral tracking bolted on (HubSpot, Salesforce)**
+Some businesses try to track referrals inside their CRM using custom fields or deal properties. It works poorly — CRMs aren't designed for partner attribution, commission calculation, or partner-facing portals. But "we already have a CRM" is a real objection.
+
+**6. Payment tools (Venmo, PayPal, Wise)**
+Not competitors in the tracking sense, but some businesses equate "paying partners" with "managing referrals." They Venmo someone $200 and consider the referral tracked. Kommison needs to show that tracking and paying are different problems.
+
+### Where Kommison Wins
+
+1. **Simplicity for service businesses.** No Shopify integration needed. No cart-based attribution. No webhook setup required. Add a partner, give them a link, track referrals, pay commissions. Done.
+
+2. **Partner portal built in.** Most spreadsheet users can't give partners a self-service view of their referrals and earnings. Kommison includes this from day one — it's a core differentiator, not an add-on.
+
+3. **Right-sized for 5–50 partners.** Enterprise tools are built for 500+ affiliates. Kommison is built for the business that has 8 referral partners and wants to stop losing track of who's owed what.
+
+4. **Operational, not marketing.** Kommison isn't about viral loops or gamified referral widgets. It's about tracking, attribution, and payout management. It's an ops tool for businesses that already get referrals.
+
+5. **Price.** $39/mo vs. $500+/mo for PartnerStack. No revenue share. No per-transaction fees. Flat, predictable pricing.
+
+6. **Speed to value.** Functional in 10 minutes. No implementation project, no developer needed, no onboarding call required.
+
+### Where It Should Intentionally Stay Simpler
+
+- **No multi-level / tiered affiliate structures.** That's MLM territory. Kommison tracks direct referrals only.
+- **No cookie-based attribution engines.** V1 uses link clicks and manual entry. No complex multi-touch attribution models.
+- **No e-commerce integrations.** Don't build Shopify, WooCommerce, or Stripe product catalog integrations. Kommison is for service businesses.
+- **No built-in referral widgets or popups.** Kommison doesn't embed into the customer's website in v1. Partners share links; admins log referrals. Keep it clean.
+- **No automated payout processing in v1.** Manual payouts first. Stripe Connect comes later when the workflow is proven.
+- **No advanced analytics or BI.** Summary stats and top partners. Not cohort analysis, funnel visualization, or custom report builders.
+
+### What Wedge It Can Own
+
+**"Referral tracking for service businesses."**
+
+This is the wedge. Enterprise affiliate platforms serve e-commerce and SaaS. Consumer referral tools serve B2C apps. Nobody is purpose-building for the agency owner, the freelance consultant, the insurance broker, the home services company. These businesses have referral partners. They pay commissions. They track nothing.
+
+Kommison owns the wedge by being:
+- The only tool specifically positioned for service-business referral programs
+- Simple enough to adopt in one sitting
+- Professional enough that partners trust it
+- Priced for businesses that measure revenue in thousands, not millions
+
+If Kommison becomes the default answer to "what do agencies use to track referrals?" — it wins.
+
+---
+
+## SECTION 12 — GO-TO-MARKET STRATEGY
+
+### How TweakAndBuild Uses Kommison as a Live Case Study
+
+TweakAndBuild is the perfect launchpad for Kommison:
+
+1. **Build it publicly.** Document the Kommison build on TweakAndBuild's blog and social channels. Show the stack decisions, the design process, the MVP scope. This demonstrates TweakAndBuild's capability while generating awareness for Kommison.
+
+2. **Feature it as a case study.** Add Kommison to TweakAndBuild's portfolio as a shipped product: "We built a referral tracking SaaS from concept to launch in X weeks. Here's the stack, the architecture, and the result." Include screenshots, tech decisions, and the business rationale.
+
+3. **Use it internally.** TweakAndBuild should run its own referral program on Kommison. If partner agencies or freelancers refer clients to TweakAndBuild, track those referrals in Kommison. This creates real usage data, real screenshots, and a genuine testimonial.
+
+4. **Offer it to TweakAndBuild clients.** When TweakAndBuild builds a website or web app for a client, recommend Kommison as their referral tracking tool. This is a natural upsell: "We built your site — now here's how you track the referrals it generates."
+
+### How Create3DParts Uses It
+
+Create3DParts is a local service business — exactly Kommison's target ICP:
+
+1. **Run a real referral program.** Offer referral bonuses to local businesses, makerspaces, or repeat customers who send new orders. Track everything in Kommison.
+
+2. **Generate authentic screenshots.** A real dashboard with real data from a real business is infinitely more compelling than mockups. Use Create3DParts' Kommison dashboard (with sensitive data blurred) in marketing materials.
+
+3. **Prove the "local business" use case.** Create3DParts validates that Kommison works for non-tech, non-agency businesses. This broadens the ICP story from "agencies" to "any small business with referral partners."
+
+### How LeadsAndSaaS Supports or Integrates Later
+
+- **Phase 1 (launch):** LeadsAndSaaS is not directly involved. Keep the products separate to avoid confusion.
+- **Phase 2 (post-traction):** Explore a lightweight integration: leads generated by LeadsAndSaaS campaigns can be tagged with referral source, pushing attribution data into Kommison. This creates a "lead gen → referral tracking" pipeline.
+- **Phase 3 (growth):** Cross-sell opportunity. LeadsAndSaaS users who run outbound campaigns may also have referral partners. Offer Kommison as a companion product: "LeadsAndSaaS finds your leads. Kommison tracks who sent them."
+
+### First Content to Publish
+
+1. **Launch post:** "Why I built Kommison — and why your referral program deserves better than a spreadsheet." Personal, founder-led, published on the Kommison blog and cross-posted to LinkedIn/X.
+
+2. **How-to guide:** "How to set up a referral program for your agency in 10 minutes." Step-by-step with Kommison screenshots. SEO-targeted.
+
+3. **Comparison post:** "Kommison vs. spreadsheets: Why small businesses need a real referral tracking tool." Directly addresses the primary competitor.
+
+4. **Case study:** "How TweakAndBuild tracks referral commissions with Kommison." Real data, real workflow, real results.
+
+5. **Twitter/X thread:** "I've been tracking referral commissions in a spreadsheet for 2 years. Here's what broke (and what I built to fix it)." Founder story format.
+
+### Landing Page CTA Strategy
+
+- **Primary CTA:** "Start Free — No credit card required." Links to signup. Appears in hero, mid-page, and footer.
+- **Secondary CTA:** "See How It Works" — scrolls to the 3-step "How It Works" section or plays a 60-second demo video.
+- **Pricing page CTA:** "Start Free" on free tier, "Start Free Trial" on paid tiers (14-day trial of paid features, then downgrade to free or upgrade).
+- **No "Book a Demo" CTA.** This isn't enterprise software. Self-serve only. If someone needs a demo to understand it, the product or the copy has failed.
+
+### Best Early Acquisition Channels
+
+1. **Founder-led social (LinkedIn, X/Twitter).** Share the build journey, use case stories, and positioning takes. Founders buying SaaS tools follow other founders. This is free, high-trust, and compounding.
+
+2. **Agency communities and Slack groups.** Marketing agency communities, freelancer Slack groups, design/dev communities. Not spamming — contributing value and mentioning Kommison when relevant.
+
+3. **TweakAndBuild client referrals.** Every TweakAndBuild client is a potential Kommison user. Warm intro with context.
+
+4. **Product Hunt launch.** One-time spike, but useful for credibility and backlinks. Time it after the product has 5–10 real users and polished screenshots.
+
+5. **SEO content.** Target long-tail keywords: "referral tracking software for agencies," "how to track referral commissions," "simple affiliate program for small business." Low competition, high intent.
+
+6. **Cold outreach to agencies.** Use LeadsAndSaaS to identify small agencies, then send personalized emails: "I noticed you work with referral partners. Here's how agencies like yours are tracking commissions."
+
+### Outreach Angles
+
+**Warm:**
+- "Hey [name], I built a tool to solve a problem I had at TweakAndBuild — tracking referral commissions. Would love your take on it."
+- "I saw you run a referral program at [company]. Curious how you're tracking commissions — I built something that might help."
+
+**Cold:**
+- "Most agencies track referral commissions in spreadsheets. I built Kommison to fix that. Free to start, takes 10 minutes to set up."
+- "Quick question: how do you track referral payouts? If the answer is 'spreadsheet' or 'I don't,' Kommison might be worth 2 minutes of your time."
+
+### Founder-Led Growth Tactics
+
+1. **Be the face.** Every piece of content should come from the founder, not "the Kommison team." People buy from people at this stage.
+2. **Share real numbers.** "Kommison hit 10 users this week." "First paying customer." Transparency builds trust and creates a narrative people follow.
+3. **Respond to every user personally.** Every support email, every feedback message, every tweet. For the first 100 users, the founder IS the product team.
+4. **Build in public, but don't over-index.** Share milestones and lessons, not every commit. The audience cares about outcomes, not your sprint velocity.
+5. **Ask for referrals from users.** Recursive — if Kommison users like the product, they'll refer other businesses. The product markets itself through its own use case.
+
+### How to Get the First 10 Paying Users
+
+1. **Users 1–2:** TweakAndBuild (internal use) and Create3DParts (internal use). Real usage, real feedback. May not pay (internal), but count as active users.
+2. **Users 3–5:** TweakAndBuild clients who already pay referral commissions. Warm intro: "We built this for ourselves, thought you'd find it useful." Convert from free to Pro.
+3. **Users 6–8:** Agency owners from founder's personal network and LinkedIn connections. Direct outreach with a genuine "I built this, would love your feedback" angle. Offer free plan, then convert.
+4. **Users 9–10:** Cold outreach to small agencies found via LeadsAndSaaS. Personalized emails, not bulk campaigns. Target agencies that publicly mention referral programs or partner pages on their websites.
+
+**Timeline target:** First 10 paying users within 60 days of public launch.
+
+---
+
+## SECTION 13 — WEBSITE COPY
+
+### Hero Section
+
+**Headline:** Stop tracking referrals in spreadsheets.
+
+**Subheadline:** Kommison gives your business a clean system to manage referral partners, track leads, calculate commissions, and handle payouts — all in one place.
+
+**CTA button:** Start Free — No Credit Card Required
+
+**Secondary link:** See How It Works ↓
+
+---
+
+### Features Section
+
+**Section headline:** Everything you need to run a referral program.
+
+**Feature 1: Partner Management**
+Add referral partners, assign unique links and codes, and keep everything organized in one place. No more digging through DMs to find who referred whom.
+
+**Feature 2: Referral Tracking**
+Every referral is logged with clear attribution — who sent it, when it arrived, and where it stands. Link clicks are tracked automatically. Manual referrals take 30 seconds to log.
+
+**Feature 3: Commission Calculation**
+Set flat fees or percentage-based commissions. When a referral converts, the commission is calculated automatically. Override when needed, with a full audit trail.
+
+**Feature 4: Payout Management**
+See every pending, approved, and paid commission in one view. Approve payouts, mark them as paid, and keep a clean record for your books.
+
+**Feature 5: Partner Portal**
+Your referral partners get their own login to check referrals, view earnings, and copy their referral link. No more "where's my payment?" emails.
+
+**Feature 6: Activity Log**
+Every action is recorded — referrals created, commissions approved, payouts completed. Full transparency for you and your partners.
+
+---
+
+### How It Works Section
+
+**Section headline:** Up and running in 10 minutes.
+
+**Step 1: Set up your program**
+Create your referral program, set your commission rules (flat fee or percentage), and choose where referral links redirect.
+
+**Step 2: Add your partners**
+Invite referral partners by email. Each gets a unique link and code, plus access to their own earnings portal.
+
+**Step 3: Track and pay**
+Referrals come in, commissions calculate automatically, and you approve payouts when you're ready. Every step is tracked and visible.
+
+---
+
+### Social Proof / Trust Section
+
+**Section headline:** Built for businesses that run on referrals.
+
+**Direction:** Until real testimonials exist, use credibility markers:
+
+- "Built by the team behind TweakAndBuild.com — a product engineering studio that ships real SaaS."
+- "Powered by the same infrastructure trusted by Stripe, Vercel, and thousands of production apps."
+- Show logos of the tech stack (Next.js, Supabase, Stripe, Vercel) as trust signals.
+- After launch: replace with real user quotes, partner counts, and referral volume stats ("X referrals tracked" as a live counter).
+
+---
+
+### Pricing Teaser
+
+**Section headline:** Simple pricing. No surprises.
+
+**Subheadline:** Start free with up to 3 partners. Upgrade when you're ready.
+
+| | Free | Pro | Business |
+|---|---|---|---|
+| **Price** | $0/mo | $39/mo | $79/mo |
+| **Partners** | 3 | 25 | Unlimited |
+| **Referrals** | 25/mo | Unlimited | Unlimited |
+| **Partner Portal** | Yes | Branded | Full custom |
+| | Start Free | Start Free | Start Free |
+
+**Below table:** All plans include commission tracking, payout management, email notifications, and activity log. No per-referral fees. No hidden costs.
+
+**CTA:** View Full Pricing →
+
+---
+
+### FAQ Section
+
+**Q: How is Kommison different from affiliate software?**
+Affiliate platforms are built for e-commerce stores with thousands of affiliates. Kommison is built for service businesses — agencies, consultants, freelancers — with 5 to 50 referral partners who need clean tracking and payout management.
+
+**Q: Do my referral partners need to create an account?**
+Partners receive an email invitation and set up a simple login. They use the partner portal to view their referrals and earnings. It takes under a minute.
+
+**Q: How do commissions get calculated?**
+You set the rules — flat fee per conversion or a percentage of deal value. When you mark a referral as converted, Kommison calculates the commission automatically. You can override any amount manually.
+
+**Q: Does Kommison process payments?**
+Not yet. In v1, you pay partners through your preferred method (Venmo, PayPal, bank transfer) and mark the payout as completed in Kommison. Automated payouts via Stripe Connect are coming soon.
+
+**Q: Can I use Kommison if I only have a few referral partners?**
+Absolutely. The free plan supports up to 3 active partners — enough to run a small referral program indefinitely. Most businesses start with 3–5 partners and grow from there.
+
+**Q: Is there a contract or commitment?**
+No. Monthly plans, cancel anytime. Annual plans are available at a discount but never required.
+
+**Q: What if I already track referrals in a spreadsheet?**
+You can keep using your spreadsheet. But when a partner asks "where's my referral?" and you can't find the answer, or when tax season hits and you have no commission records, you'll wish you had a system. Kommison takes 10 minutes to set up and replaces hours of manual tracking every month.
+
+**Q: Who built this?**
+Kommison is built by Bedrock Alliance LLC, the same team behind TweakAndBuild.com. We build and run SaaS products — Kommison is one of them. It's not a side project; it's a real product we use ourselves.
+
+---
+
+### Final CTA Section
+
+**Headline:** Your referrals deserve a real system.
+
+**Subheadline:** Set up your referral program in 10 minutes. Free to start, no credit card required.
+
+**CTA button:** Get Started Free
+
+**Below CTA:** Join agencies, freelancers, and small businesses already tracking referrals with Kommison.
+
+---
+
+## SECTION 14 — PORTFOLIO & CASE STUDY FIT
+
+### How Kommison Should Appear in the Portfolio
+
+Kommison should be featured as a **shipped SaaS product** — not a concept, not a template, not a client project. It should sit alongside TweakAndBuild, LeadsAndSaaS, and Create3DParts as proof that Bedrock Alliance builds and operates real products.
+
+**Portfolio card description:**
+"Kommison — Referral and commission tracking SaaS for small businesses. Built with Next.js, Supabase, and Stripe. Manages referral partners, tracks leads and conversions, calculates commissions, and handles payouts. Includes a partner-facing portal."
+
+### How to Describe It on a Work/Projects Page
+
+**Short version (1 sentence):**
+"A SaaS platform that helps small businesses run referral programs and track commissions — from partner signup to payout."
+
+**Medium version (1 paragraph):**
+"Kommison is a referral and commission tracking platform built for agencies, freelancers, and service businesses. It replaces the spreadsheets and informal tracking that most small businesses rely on with a clean system: create referral partners, assign trackable links, log referrals and conversions, auto-calculate commissions, and manage payouts. Partners get their own portal to view earnings. Built on Next.js, Supabase, and Stripe. Designed, built, and operated by Bedrock Alliance."
+
+**Long version (for a dedicated case study page):**
+Structure: Problem → Solution → Stack → Architecture decisions → Key features → Screenshots → Lessons learned → Results (users, revenue, or engagement metrics once available).
+
+### How It Strengthens Credibility as a Founder-Builder
+
+1. **Proves full-stack product ownership.** Not just code — product strategy, UX, data modeling, billing, GTM. Kommison shows the ability to take a product from idea to revenue.
+
+2. **Demonstrates portfolio coherence.** Four products, one ecosystem, shared buyer persona. This isn't random project hopping — it's a deliberate portfolio strategy.
+
+3. **Shows builder-operator range.** TweakAndBuild is a service business. Create3DParts is a local business. LeadsAndSaaS is a lead gen tool. Kommison is a SaaS product. Different business models, same builder.
+
+4. **Creates a self-referencing loop.** TweakAndBuild built Kommison. Kommison tracks referrals for TweakAndBuild clients. Create3DParts uses Kommison. Each product validates the others.
+
+5. **Generates real case study material.** Revenue numbers, user counts, and retention metrics from Kommison become portfolio content for TweakAndBuild. "We built a SaaS that hit $X MRR in Y months" is the ultimate agency credential.
+
+### What Screenshots/Mockups Would Make It Look Premium
+
+1. **Dashboard overview** — Clean stat cards, activity feed, and top partners list with real (or realistic) data. This is the hero screenshot.
+2. **Partners list** — A populated table showing 8–12 partners with status badges, referral counts, and earnings. Shows the product has depth.
+3. **Partner detail page** — One partner's full view with their referrals, commissions, and activity timeline. Shows data richness.
+4. **Commission/payout view** — The financial view with pending, approved, and paid tabs. Shows operational capability.
+5. **Partner portal dashboard** — The partner-facing view with earnings summary and referral link. Shows the dual-sided value.
+6. **Mobile view** — One or two responsive screenshots showing the dashboard or partner portal on mobile. Shows polish.
+
+**Presentation guidelines:**
+- Use browser mockup frames (not flat screenshots)
+- Show real-looking data, not "Lorem ipsum" or obviously fake names
+- Use consistent color theme across all screenshots
+- Include subtle drop shadows and rounded corners for a premium feel
+- Dark mode variant for one or two screenshots (if supported) adds visual variety
+
+### How It Complements the Other Products
+
+| Product | Role in Ecosystem | Relationship to Kommison |
+|---------|-------------------|-------------------------|
+| **TweakAndBuild** | The builder | Built Kommison. Uses it as a case study. Recommends it to clients. |
+| **LeadsAndSaaS** | The top-of-funnel | Generates leads. Kommison tracks which leads came from referral partners (future integration). |
+| **Create3DParts** | The internal customer | Uses Kommison to run its own referral program. Provides real-world validation for the "local business" ICP. |
+| **Kommison** | The operational layer | Tracks the referrals and commissions that the other products generate or benefit from. |
+
+The four products together tell a story: "I build products (TweakAndBuild), I find customers (LeadsAndSaaS), I track referrals (Kommison), and I run a local business that uses all of them (Create3DParts)." That's a coherent, credible founder portfolio.
+
+---
+
+## SECTION 15 — FOUNDER RECOMMENDATION
+
+### Is This a Smart Product to Pursue?
+
+**Yes.** Kommison is a smart product for three reasons:
+
+1. **The problem is real, widespread, and underserved.** Every small business with referral partners has this problem. Most solve it with spreadsheets or memory. The enterprise tools are too expensive and too complex. The gap is wide open.
+
+2. **The build is manageable.** This is a well-scoped CRUD application with a few smart workflows — not an ML model, not a data pipeline, not a marketplace with chicken-and-egg dynamics. One competent developer (or founder) can ship the MVP in 4–6 weeks on the Next.js/Supabase stack.
+
+3. **The portfolio fit is exceptional.** Kommison isn't an isolated bet. It strengthens every other product in the Bedrock Alliance ecosystem. It generates case study material for TweakAndBuild, provides a real use case for Create3DParts, and creates cross-sell opportunities with LeadsAndSaaS. Even if Kommison only reaches modest revenue, it adds disproportionate value to the portfolio.
+
+### Biggest Advantage
+
+**Speed to market combined with built-in distribution.** Most founders building referral software don't have an agency (TweakAndBuild) with clients who need the product, a local business (Create3DParts) that can use it internally, and a personal network of agency owners and freelancers. You do. The first 10–20 users are already reachable without paid acquisition. That's rare and valuable.
+
+### Biggest Risk
+
+**Apathy, not competition.** The risk isn't that someone builds a better tool. The risk is that small businesses don't care enough to switch from their spreadsheet. The spreadsheet is free, familiar, and "good enough" — until it isn't. Kommison has to make the pain of not switching feel urgent, and the switching cost feel trivially low. If the product can't get someone from signup to "this is better than my spreadsheet" in under 15 minutes, it will churn.
+
+### What to Obsess Over
+
+1. **Time to value.** The gap between signup and "I see why this is better" must be under 10 minutes. Pre-fill defaults, minimize onboarding steps, show immediate value even with one partner and zero referrals.
+
+2. **Partner portal quality.** This is the sleeper differentiator. When a partner logs in and sees their earnings in a clean, professional portal, they trust the business more, they refer more, and they tell other businesses about the tool. The partner portal is Kommison's best marketing channel.
+
+3. **The conversion moment.** When an admin marks a referral as converted and sees the commission auto-calculate, that's the "magic moment." It must be satisfying, clear, and correct. If the math is wrong or the UX is confusing at that moment, trust breaks immediately.
+
+4. **Data integrity.** This product tracks money. If a commission amount is wrong, if a referral is misattributed, if a payout status is incorrect — users leave and don't come back. Accuracy is non-negotiable.
+
+### What to Avoid
+
+1. **Feature creep before product-market fit.** Don't build Stripe Connect, API integrations, or advanced analytics until 50+ paying users are actively using the core product. Every feature added before PMF is a distraction.
+
+2. **Chasing enterprise customers.** If a company with 200 affiliates asks for custom features, multi-level commissions, and SSO — say no. They're not the ICP. Build for the agency with 12 partners, not the company with 200.
+
+3. **Competing on features with enterprise tools.** Kommison wins on simplicity and speed, not feature count. The moment you add a 47th setting, you've lost the positioning.
+
+4. **Over-investing in marketing before the product is sticky.** Don't run paid ads or hire a content writer until the first 20 users are retaining past month 3. If they're not retaining, the product has a problem — not the marketing.
+
+5. **Building in isolation.** Ship the MVP, get it in front of real users, and iterate based on real feedback. Don't spend 6 months perfecting the product before anyone sees it.
+
+### What Would Make This Actually Win
+
+1. **Nail the "spreadsheet replacement" positioning.** Every touch of copy, every onboarding step, every feature decision should reinforce: "This is what you switch to when your spreadsheet stops working." Own that transition moment.
+
+2. **Make the partner portal so good that partners request it.** When a referral partner who uses Kommison with one business starts asking their other clients to use it too — that's organic, compounding growth. The partner portal is the viral loop.
+
+3. **Build a content moat around "referral programs for service businesses."** Write the definitive guides, templates, and resources for agencies and freelancers running referral programs. Become the authority on this specific topic. SEO compounds.
+
+4. **Ship fast, iterate weekly, listen obsessively.** The first version won't be right. The fifth version will be close. The twentieth version will be sticky. The speed of iteration matters more than the quality of the first release.
+
+5. **Use the portfolio.** This is the unfair advantage. TweakAndBuild clients, Create3DParts as a live case study, founder credibility, and a built-in network of potential users. Most SaaS founders would kill for this kind of warm distribution. Use it aggressively.
+
+---
+
+## FINAL SUMMARY
+
+### 1. Product Verdict
+
+Kommison is a well-scoped, commercially viable SaaS product that solves a real problem for a reachable market. The build complexity is low, the portfolio fit is exceptional, and the distribution advantages (TweakAndBuild clients, Create3DParts as internal user, founder's agency network) dramatically reduce the go-to-market risk that kills most early-stage SaaS products. This is a smart bet.
+
+### 2. Sharpest One-Line Positioning
+
+**Referral tracking for businesses too busy for spreadsheets and too small for enterprise software.**
+
+### 3. MVP Summary
+
+V1 ships a single-program referral management system: business owner signs up, creates a referral program with flat or percentage commission rules, adds partners with unique links and codes, tracks referred leads and conversions, auto-calculates commissions, manages payout statuses (pending → approved → paid), and gives each partner a self-service portal to view referrals and earnings. Manual payouts only. Email notifications for key events. Full activity log for audit and trust. No integrations, no API, no automated payments — just clean, reliable referral tracking that works from day one.
+
+### 4. Best First Niche
+
+Small agency owners (marketing, dev, design, consulting) with 5–25 referral partners who already pay commissions informally. Highest pain awareness, easiest to reach via TweakAndBuild's network, natural virality through partner invitations, and price-insensitive relative to the value delivered.
+
+### 5. Best Starting Price Point
+
+$39/mo for Pro tier, with a free plan (3 partners, 25 referrals/mo) for acquisition and self-serve validation. No discounts, no early-bird pricing, no revenue share. Flat monthly fee that reflects the operational value of replacing spreadsheet-based referral tracking.
