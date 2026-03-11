@@ -4,7 +4,7 @@
   "scripts": {
     "dev": "cd kommison && npm run dev",
     "build": "cd kommison && npm run build",
-    "vercel-build": "npm install --include=dev && npm --prefix kommison install --include=dev && npm --prefix kommison run build && rm -rf .next && cp -R kommison/.next .next && find .next -type f -name '*.nft.json' -exec sed -E -i 's#([.][.]/)+node_modules/#node_modules/#g' {} +"
+    "vercel-build": "npm install --include=dev && npm --prefix kommison install --include=dev && npm --prefix kommison run build && rm -rf .next && cp -R kommison/.next .next && find .next -type f -name '*.nft.json' -exec sed -E -i 's#([.][.]/)+node_modules/#node_modules/#g' {} + && find .next -type f -name '*.nft.json' | xargs -r -n1 dirname | sort -u | while IFS= read -r d; do ln -sfn \"$PWD/node_modules\" \"$d/node_modules\"; done"
   },
   "dependencies": {
     "client-only": "0.0.1",
