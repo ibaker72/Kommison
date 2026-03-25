@@ -425,9 +425,9 @@ function drawPlayer(
   player: Player,
   time: number
 ): void {
-  const { x, y, invulnFrames } = player;
-  const pulse = 0.8 + 0.2 * Math.sin(time * 0.004);
-  const half = PLAYER_SIZE / 2;
+  const { x, y, invulnFrames, direction } = player;
+  const pulse = 0.7 + 0.3 * Math.sin(time * 0.004);
+  const size = PLAYER_SIZE;
 
   if (invulnFrames > 0 && Math.floor(time / 80) % 2 === 0) {
     return;
@@ -435,30 +435,82 @@ function drawPlayer(
 
   ctx.save();
 
+  // Determine rotation from movement direction
+  let angle = -Math.PI / 2; // default: pointing up
+  if (direction.dx !== 0 || direction.dy !== 0) {
+    angle = Math.atan2(direction.dy, direction.dx);
+  }
+
+  ctx.translate(x, y);
+  ctx.rotate(angle);
+
+  // Outer glow halo
+  const glowGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 1.2);
+  glowGrad.addColorStop(0, 'rgba(0, 255, 204, 0.25)');
+  glowGrad.addColorStop(0.5, 'rgba(0, 255, 204, 0.08)');
+  glowGrad.addColorStop(1, 'rgba(0, 255, 204, 0)');
+  ctx.fillStyle = glowGrad;
+  ctx.beginPath();
+  ctx.arc(0, 0, size * 1.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Main ship body — triangular with notched tail
   ctx.shadowColor = PLAYER_GLOW_COLOR;
-  ctx.shadowBlur = 15 * pulse;
+  ctx.shadowBlur = 18 * pulse;
+
+  const nose = size * 0.6;
+  const wing = size * 0.45;
+  const tail = size * 0.4;
+  const notch = size * 0.15;
 
   ctx.fillStyle = PLAYER_COLOR;
   ctx.beginPath();
-  ctx.moveTo(x, y - half);
-  ctx.lineTo(x + half, y);
-  ctx.lineTo(x, y + half);
-  ctx.lineTo(x - half, y);
+  ctx.moveTo(nose, 0);                     // nose tip
+  ctx.lineTo(-tail, -wing);                // left wing
+  ctx.lineTo(-tail + notch, 0);            // tail notch
+  ctx.lineTo(-tail, wing);                 // right wing
   ctx.closePath();
   ctx.fill();
 
-  ctx.fillStyle = '#ffffff';
+  // Inner highlight layer
+  ctx.fillStyle = 'rgba(180, 255, 240, 0.4)';
   ctx.beginPath();
-  ctx.arc(x, y, 2, 0, Math.PI * 2);
+  ctx.moveTo(nose * 0.6, 0);
+  ctx.lineTo(-tail * 0.4, -wing * 0.4);
+  ctx.lineTo(-tail * 0.3, 0);
+  ctx.lineTo(-tail * 0.4, wing * 0.4);
+  ctx.closePath();
   ctx.fill();
 
-  if (player.trail.length > 0) {
-    ctx.strokeStyle = 'rgba(255, 0, 255, 0.5)';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.arc(x, y, half + 3 + Math.sin(time * 0.01) * 1.5, 0, Math.PI * 2);
-    ctx.stroke();
-  }
+  // Bright core dot
+  ctx.shadowBlur = 10;
+  ctx.shadowColor = '#ffffff';
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Engine glow at tail
+  const enginePulse = 0.5 + 0.5 * Math.sin(time * 0.015);
+  ctx.shadowColor = 'rgba(0, 200, 255, 0.8)';
+  ctx.shadowBlur = 8 * enginePulse;
+  ctx.fillStyle = `rgba(0, 220, 255, ${0.4 + 0.3 * enginePulse})`;
+  ctx.beginPath();
+  ctx.arc(-tail + notch, 0, 2.5 + enginePulse, 0, Math.PI * 2);
+  ctx.fill();
 
   ctx.restore();
+
+  // Trail-active ring (drawn in world space, not rotated)
+  if (player.trail.length > 0) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255, 0, 255, 0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = 'rgba(255, 0, 255, 0.4)';
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.arc(x, y, size * 0.7 + Math.sin(time * 0.01) * 2, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
 }

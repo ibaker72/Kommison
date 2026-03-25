@@ -3,9 +3,9 @@ export const ARENA_WIDTH = 600;
 export const ARENA_HEIGHT = 480;
 export const BORDER_WIDTH = 4;
 
-export const PLAYER_SIZE = 10;
-export const PLAYER_SPEED_BORDER = 3.5;
-export const PLAYER_SPEED_TRAIL = 2.8;
+export const PLAYER_SIZE = 18;
+export const PLAYER_SPEED_BORDER = 4;
+export const PLAYER_SPEED_TRAIL = 3;
 export const PLAYER_COLOR = '#00ffcc';
 export const PLAYER_GLOW_COLOR = 'rgba(0, 255, 204, 0.8)';
 export const PLAYER_HIT_RADIUS = 6;
@@ -42,7 +42,7 @@ export const ARENA_BORDER_GLOW = 'rgba(0, 255, 204, 0.5)';
 export const CAPTURED_FILL = 'rgba(0, 255, 204, 0.15)';
 export const CAPTURED_BORDER = 'rgba(0, 255, 204, 0.3)';
 
-export const BORDER_TOLERANCE = 6;
+export const BORDER_TOLERANCE = 3;
 
 export const DIRECTIONS = {
   UP: { dx: 0, dy: -1 },

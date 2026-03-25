@@ -21,13 +21,22 @@ export default function VoltGrid() {
   const [hasChaser, setHasChaser] = useState(false);
 
   // ─── Detect Touch ──────────────────────────────────────────
+  // Only show touch controls on actual touch-primary devices (phones/tablets).
+  // Laptops with touchscreens still get keyboard controls.
 
   useEffect(() => {
-    const check = () => {
-      setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
-    };
-    check();
-    window.addEventListener('touchstart', () => setIsTouchDevice(true), { once: true });
+    const isCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
+    const isSmallScreen = window.innerWidth <= 1024;
+    // Only default to touch mode if primary pointer is coarse AND screen is small
+    if (isCoarsePointer && isSmallScreen) {
+      setIsTouchDevice(true);
+    }
+    // Fallback: if user actually touches, enable touch controls
+    window.addEventListener('touchstart', () => {
+      if (window.matchMedia('(pointer: coarse)').matches) {
+        setIsTouchDevice(true);
+      }
+    }, { once: true });
   }, []);
 
   // ─── Keyboard Input ────────────────────────────────────────
@@ -159,7 +168,7 @@ export default function VoltGrid() {
     <div className="h-dvh bg-[#050510] text-white flex flex-col overflow-hidden select-none">
 
       {/* ── Top HUD ─────────────────────────────────────────── */}
-      <div className="shrink-0 px-3 sm:px-6 pt-2 pb-1 sm:pt-3 sm:pb-2">
+      <div className="shrink-0 px-3 sm:px-6 pt-1 pb-0.5 sm:pt-2 sm:pb-1">
         {/* Title row */}
         <div className="flex items-center justify-between mb-1.5 sm:mb-2">
           <div>
@@ -217,8 +226,8 @@ export default function VoltGrid() {
       </div>
 
       {/* ── Canvas Area (fills remaining space) ─────────────── */}
-      <div className="flex-1 min-h-0 relative flex items-center justify-center px-1 sm:px-4">
-        <div className="relative w-full h-full max-w-[900px] flex items-center justify-center">
+      <div className="flex-1 min-h-0 relative flex items-center justify-center px-1">
+        <div className="relative w-full h-full flex items-center justify-center">
           <canvas
             ref={canvasRef}
             className="block rounded-sm"
@@ -282,7 +291,7 @@ export default function VoltGrid() {
       </div>
 
       {/* ── Bottom: Instructions (desktop) / D-pad (touch) ── */}
-      <div className="shrink-0 px-3 sm:px-6 pb-2 sm:pb-3 pt-1 sm:pt-2">
+      <div className="shrink-0 px-3 sm:px-6 pb-1 sm:pb-2 pt-0.5 sm:pt-1">
         {isTouchDevice ? (
           /* Touch D-Pad */
           <div className="flex justify-center">
