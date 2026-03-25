@@ -1,6 +1,11 @@
 import { Point, Orb, CapturedRegion } from './types';
 import { ARENA_WIDTH, ARENA_HEIGHT, BORDER_WIDTH } from './constants';
-import { distance, pointInPolygon, polygonArea } from './utils';
+import {
+  pointInPolygon,
+  polygonArea,
+  pointToSegmentDistance,
+  segmentsIntersect,
+} from './utils';
 
 // ─── Orb Collision Detection ──────────────────────────────────────
 
@@ -8,38 +13,30 @@ import { distance, pointInPolygon, polygonArea } from './utils';
 export function orbCollidesWithTrail(orb: Orb, trail: Point[]): boolean {
   if (trail.length < 2) return false;
 
+  const orbPt = { x: orb.x, y: orb.y };
   for (let i = 0; i < trail.length - 1; i++) {
-    const a = trail[i];
-    const b = trail[i + 1];
-    if (pointToSegmentDistance({ x: orb.x, y: orb.y }, a, b) < orb.radius + 2) {
+    if (pointToSegmentDistance(orbPt, trail[i], trail[i + 1]) < orb.radius + 1) {
       return true;
     }
   }
   return false;
 }
 
-/** Distance from a point to a line segment */
-function pointToSegmentDistance(p: Point, a: Point, b: Point): number {
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  const lenSq = dx * dx + dy * dy;
+// ─── Self-Trail Collision ─────────────────────────────────────────
 
-  if (lenSq === 0) return distance(p, a);
+/** Check if moving from `from` to `to` crosses any existing trail segment.
+ *  Skips the last `skipTail` segments to avoid false positives near the player. */
+export function selfTrailCollision(
+  from: Point,
+  to: Point,
+  trail: Point[],
+  skipTail = 3
+): boolean {
+  if (trail.length < 2) return false;
 
-  let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq;
-  t = Math.max(0, Math.min(1, t));
-
-  const proj = { x: a.x + t * dx, y: a.y + t * dy };
-  return distance(p, proj);
-}
-
-/** Check if orb hits a captured region boundary */
-export function orbCollidesWithRegion(orb: Orb, region: CapturedRegion): boolean {
-  const pts = region.points;
-  for (let i = 0; i < pts.length; i++) {
-    const a = pts[i];
-    const b = pts[(i + 1) % pts.length];
-    if (pointToSegmentDistance({ x: orb.x, y: orb.y }, a, b) < orb.radius + 1) {
+  const checkEnd = Math.max(0, trail.length - 1 - skipTail);
+  for (let i = 0; i < checkEnd; i++) {
+    if (segmentsIntersect(from, to, trail[i], trail[i + 1])) {
       return true;
     }
   }
@@ -73,12 +70,36 @@ export function bounceOrb(orb: Orb, capturedRegions: CapturedRegion[]): void {
 
   // Bounce off captured region edges
   for (const region of capturedRegions) {
-    if (pointInPolygon({ x: orb.x, y: orb.y }, region.points)) {
-      // Push orb out and reverse direction
-      orb.dx = -orb.dx;
-      orb.dy = -orb.dy;
-      orb.x += orb.dx * 2;
-      orb.y += orb.dy * 2;
+    const orbPt = { x: orb.x, y: orb.y };
+    if (pointInPolygon(orbPt, region.points)) {
+      // Find nearest edge to determine bounce normal
+      let minDist = Infinity;
+      let nearestNormalX = 0;
+      let nearestNormalY = 0;
+      const pts = region.points;
+      for (let i = 0; i < pts.length; i++) {
+        const a = pts[i];
+        const b = pts[(i + 1) % pts.length];
+        const d = pointToSegmentDistance(orbPt, a, b);
+        if (d < minDist) {
+          minDist = d;
+          // Normal is perpendicular to edge
+          const edgeDx = b.x - a.x;
+          const edgeDy = b.y - a.y;
+          const len = Math.sqrt(edgeDx * edgeDx + edgeDy * edgeDy) || 1;
+          nearestNormalX = -edgeDy / len;
+          nearestNormalY = edgeDx / len;
+        }
+      }
+
+      // Reflect velocity across the normal
+      const dot = orb.dx * nearestNormalX + orb.dy * nearestNormalY;
+      orb.dx -= 2 * dot * nearestNormalX;
+      orb.dy -= 2 * dot * nearestNormalY;
+
+      // Push out
+      orb.x += orb.dx * 3;
+      orb.y += orb.dy * 3;
       break;
     }
   }
@@ -88,12 +109,11 @@ export function bounceOrb(orb: Orb, capturedRegions: CapturedRegion[]): void {
 
 /**
  * Build a closed polygon from the trail + border walk.
- * Returns the polygon that does NOT contain the orb.
+ * Returns the polygon that does NOT contain any orb.
  */
 export function buildCapturePolygon(
   trail: Point[],
   orbs: { x: number; y: number }[],
-  existingRegions: CapturedRegion[]
 ): Point[] | null {
   if (trail.length < 3) return null;
 
@@ -101,83 +121,88 @@ export function buildCapturePolygon(
   const end = trail[trail.length - 1];
 
   // Build two candidate polygons by walking the border in each direction
-  const clockwiseBorder = walkBorder(end, start, true);
-  const counterClockwiseBorder = walkBorder(end, start, false);
+  const cwBorder = walkBorder(end, start, true);
+  const ccwBorder = walkBorder(end, start, false);
 
-  const poly1 = [...trail, ...clockwiseBorder];
-  const poly2 = [...trail, ...counterClockwiseBorder];
+  const poly1 = [...trail, ...cwBorder];
+  const poly2 = [...trail, ...ccwBorder];
 
   const area1 = polygonArea(poly1);
   const area2 = polygonArea(poly2);
 
+  // Validate polygons have non-trivial area
+  if (area1 < 10 && area2 < 10) return null;
+
   // Check which polygon contains the orb(s)
-  const orb = orbs[0]; // Primary orb for now
-  const orb1Inside = pointInPolygon({ x: orb.x, y: orb.y }, poly1);
-  const orb2Inside = pointInPolygon({ x: orb.x, y: orb.y }, poly2);
+  const orb = orbs[0];
+  const orbPt = { x: orb.x, y: orb.y };
+  const orb1Inside = pointInPolygon(orbPt, poly1);
+  const orb2Inside = pointInPolygon(orbPt, poly2);
 
   // Return the polygon that does NOT contain the orb
-  // If neither contains, return the smaller one
   if (!orb1Inside && !orb2Inside) {
     return area1 < area2 ? poly1 : poly2;
   }
   if (!orb1Inside) return poly1;
   if (!orb2Inside) return poly2;
 
-  // Both contain orb somehow - return smaller (shouldn't normally happen)
+  // Both contain orb — return smaller (edge case)
   return area1 < area2 ? poly1 : poly2;
 }
 
-/** Walk along the arena border from point A to point B */
-function walkBorder(from: Point, to: Point, clockwise: boolean): Point[] {
+// ─── Border Walking ──────────────────────────────────────────────
+
+/** Get which border edge a point is on: 0=top, 1=right, 2=bottom, 3=left */
+function getEdge(p: Point): number {
   const bw = BORDER_WIDTH;
-  const hw = bw / 2;
+  const tol = bw + 2;
+  if (p.y <= tol) return 0;
+  if (p.x >= ARENA_WIDTH - tol) return 1;
+  if (p.y >= ARENA_HEIGHT - tol) return 2;
+  return 3;
+}
+
+/** Walk along the arena border from `from` to `to`, going clockwise or counter-clockwise.
+ *  Returns intermediate points (corners) plus the `to` point. Does NOT include `from`. */
+function walkBorder(from: Point, to: Point, clockwise: boolean): Point[] {
+  const hw = BORDER_WIDTH / 2;
   const maxX = ARENA_WIDTH - hw;
   const maxY = ARENA_HEIGHT - hw;
 
-  // Define corner points
+  // Corner coordinates in CW order: TL, TR, BR, BL
   const corners: Point[] = [
-    { x: hw, y: hw },           // top-left
-    { x: maxX, y: hw },         // top-right
-    { x: maxX, y: maxY },       // bottom-right
-    { x: hw, y: maxY },         // bottom-left
+    { x: hw, y: hw },
+    { x: maxX, y: hw },
+    { x: maxX, y: maxY },
+    { x: hw, y: maxY },
   ];
 
-  // Get border edge for a point (0=top, 1=right, 2=bottom, 3=left)
-  function getEdge(p: Point): number {
-    if (p.y <= bw) return 0;
-    if (p.x >= ARENA_WIDTH - bw) return 1;
-    if (p.y >= ARENA_HEIGHT - bw) return 2;
-    return 3;
-  }
-
-  // Get position along the perimeter (0 to 4, one unit per edge)
-  function getPerimeterPos(p: Point): number {
-    const edge = getEdge(p);
-    switch (edge) {
-      case 0: return (p.x - hw) / (maxX - hw);
-      case 1: return 1 + (p.y - hw) / (maxY - hw);
-      case 2: return 2 + (maxX - p.x) / (maxX - hw);
-      case 3: return 3 + (maxY - p.y) / (maxY - hw);
-      default: return 0;
-    }
-  }
-
-  const result: Point[] = [];
+  // Which corners connect edges:
+  // Edge 0 (top) ends at corner 1 (TR) going CW
+  // Edge 1 (right) ends at corner 2 (BR) going CW
+  // Edge 2 (bottom) ends at corner 3 (BL) going CW
+  // Edge 3 (left) ends at corner 0 (TL) going CW
   const fromEdge = getEdge(from);
   const toEdge = getEdge(to);
 
+  const result: Point[] = [];
   let currentEdge = fromEdge;
   const step = clockwise ? 1 : -1;
 
-  // Walk corners until we reach the target edge
-  let iterations = 0;
-  while (currentEdge !== toEdge && iterations < 8) {
-    const nextEdge = ((currentEdge + step) + 4) % 4;
-    const cornerIdx = clockwise ? (currentEdge + 1) % 4 : currentEdge;
-    result.push({ ...corners[cornerIdx] });
-    currentEdge = nextEdge;
-    iterations++;
+  let iters = 0;
+  while (currentEdge !== toEdge && iters < 5) {
+    // Add the corner at the transition between currentEdge and nextEdge
+    if (clockwise) {
+      result.push({ ...corners[(currentEdge + 1) % 4] });
+    } else {
+      result.push({ ...corners[currentEdge] });
+    }
+    currentEdge = ((currentEdge + step) + 4) % 4;
+    iters++;
   }
+
+  // Add the destination point snapped to border
+  result.push({ x: to.x, y: to.y });
 
   return result;
 }

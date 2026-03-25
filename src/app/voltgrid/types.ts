@@ -17,6 +17,7 @@ export interface Player {
   onBorder: boolean;
   trail: Point[];
   lives: number;
+  invulnFrames: number;
 }
 
 export interface Orb {

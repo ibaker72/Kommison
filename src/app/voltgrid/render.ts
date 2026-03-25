@@ -1,4 +1,4 @@
-import { GameState } from './types';
+import { GameState, CapturedRegion, Player } from './types';
 import {
   ARENA_WIDTH,
   ARENA_HEIGHT,
@@ -17,9 +17,100 @@ import {
   ARENA_BG_COLOR,
   ARENA_BORDER_COLOR,
   ARENA_BORDER_GLOW,
-  CAPTURED_FILL,
   CAPTURED_BORDER,
 } from './constants';
+
+// ─── Background Image Cache ──────────────────────────────────────
+
+let bgCanvas: OffscreenCanvas | null = null;
+
+/** Generate a procedural cyber/neon background image once */
+function getBackgroundImage(): OffscreenCanvas {
+  if (bgCanvas) return bgCanvas;
+
+  bgCanvas = new OffscreenCanvas(ARENA_WIDTH, ARENA_HEIGHT);
+  const ctx = bgCanvas.getContext('2d')!;
+  const bw = BORDER_WIDTH;
+
+  // Deep gradient base
+  const grad = ctx.createLinearGradient(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+  grad.addColorStop(0, '#0a1628');
+  grad.addColorStop(0.3, '#0d1f3c');
+  grad.addColorStop(0.5, '#162040');
+  grad.addColorStop(0.7, '#0a1a30');
+  grad.addColorStop(1, '#081020');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+
+  // Neon circuit pattern
+  ctx.strokeStyle = 'rgba(0, 255, 204, 0.12)';
+  ctx.lineWidth = 1;
+  const spacing = 20;
+
+  // Horizontal circuit lines
+  for (let y = bw; y < ARENA_HEIGHT - bw; y += spacing) {
+    ctx.beginPath();
+    ctx.moveTo(bw, y);
+    let x = bw;
+    while (x < ARENA_WIDTH - bw) {
+      const segLen = 10 + Math.random() * 40;
+      x += segLen;
+      ctx.lineTo(Math.min(x, ARENA_WIDTH - bw), y);
+      if (Math.random() > 0.6 && x < ARENA_WIDTH - bw - 20) {
+        const jog = (Math.random() > 0.5 ? 1 : -1) * spacing * 0.5;
+        ctx.lineTo(x, y + jog);
+        ctx.lineTo(x + 10, y + jog);
+        ctx.lineTo(x + 10, y);
+        x += 10;
+      }
+    }
+    ctx.stroke();
+  }
+
+  // Glowing nodes at intersections
+  ctx.fillStyle = 'rgba(0, 255, 204, 0.25)';
+  for (let i = 0; i < 40; i++) {
+    const nx = bw + 20 + Math.random() * (ARENA_WIDTH - 2 * bw - 40);
+    const ny = bw + 20 + Math.random() * (ARENA_HEIGHT - 2 * bw - 40);
+    const r = 1 + Math.random() * 2;
+    ctx.beginPath();
+    ctx.arc(nx, ny, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Larger glowing spots
+  for (let i = 0; i < 8; i++) {
+    const sx = bw + 40 + Math.random() * (ARENA_WIDTH - 2 * bw - 80);
+    const sy = bw + 40 + Math.random() * (ARENA_HEIGHT - 2 * bw - 80);
+    const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, 30 + Math.random() * 30);
+    sg.addColorStop(0, 'rgba(0, 255, 204, 0.08)');
+    sg.addColorStop(0.5, 'rgba(0, 200, 180, 0.03)');
+    sg.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = sg;
+    ctx.fillRect(sx - 60, sy - 60, 120, 120);
+  }
+
+  // Magenta accent streaks
+  ctx.strokeStyle = 'rgba(255, 0, 255, 0.06)';
+  ctx.lineWidth = 1.5;
+  for (let i = 0; i < 12; i++) {
+    const sx = Math.random() * ARENA_WIDTH;
+    const sy = Math.random() * ARENA_HEIGHT;
+    const angle = Math.random() * Math.PI;
+    const len = 40 + Math.random() * 80;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy);
+    ctx.lineTo(sx + Math.cos(angle) * len, sy + Math.sin(angle) * len);
+    ctx.stroke();
+  }
+
+  return bgCanvas;
+}
+
+/** Reset background cache on restart */
+export function resetBackgroundCache(): void {
+  bgCanvas = null;
+}
 
 // ─── Rendering Engine ─────────────────────────────────────────────
 
@@ -30,7 +121,6 @@ export function render(
   canvasHeight: number,
   time: number
 ): void {
-  // Calculate scale and offset for centering
   const scaleX = canvasWidth / ARENA_WIDTH;
   const scaleY = canvasHeight / ARENA_HEIGHT;
   const scale = Math.min(scaleX, scaleY);
@@ -47,14 +137,14 @@ export function render(
   ctx.translate(offsetX, offsetY);
   ctx.scale(scale, scale);
 
-  // Draw arena background
-  drawArenaBackground(ctx, time);
+  // Draw dark arena background
+  drawArenaBackground(ctx);
 
-  // Draw grid
+  // Draw subtle grid
   drawGrid(ctx, time);
 
-  // Draw captured regions
-  drawCapturedRegions(ctx, state, time);
+  // Draw revealed background image through captured regions
+  drawRevealedRegions(ctx, state.capturedRegions, time);
 
   // Draw arena border
   drawArenaBorder(ctx, time);
@@ -68,14 +158,14 @@ export function render(
   }
 
   // Draw player
-  drawPlayer(ctx, state.player.x, state.player.y, time);
+  drawPlayer(ctx, state.player, time);
 
   ctx.restore();
 }
 
 // ─── Sub-renderers ────────────────────────────────────────────────
 
-function drawArenaBackground(ctx: CanvasRenderingContext2D, _time: number): void {
+function drawArenaBackground(ctx: CanvasRenderingContext2D): void {
   ctx.fillStyle = ARENA_BG_COLOR;
   ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
 }
@@ -85,7 +175,7 @@ function drawGrid(ctx: CanvasRenderingContext2D, time: number): void {
   const pulse = 0.5 + 0.5 * Math.sin(time * 0.001);
   ctx.strokeStyle = GRID_COLOR;
   ctx.lineWidth = 0.5;
-  ctx.globalAlpha = 0.3 + pulse * 0.15;
+  ctx.globalAlpha = 0.3 + pulse * 0.1;
 
   for (let x = bw; x < ARENA_WIDTH - bw; x += GRID_SPACING) {
     ctx.beginPath();
@@ -115,35 +205,54 @@ function drawArenaBorder(ctx: CanvasRenderingContext2D, time: number): void {
   ctx.restore();
 }
 
-function drawCapturedRegions(
+/** Draw captured regions with the revealed background image clipped through */
+function drawRevealedRegions(
   ctx: CanvasRenderingContext2D,
-  state: GameState,
+  regions: CapturedRegion[],
   time: number
 ): void {
-  const pulse = 0.8 + 0.2 * Math.sin(time * 0.003);
+  if (regions.length === 0) return;
 
-  for (const region of state.capturedRegions) {
+  const bgImage = getBackgroundImage();
+  const pulse = 0.85 + 0.15 * Math.sin(time * 0.003);
+
+  // Build a combined clip path for all regions
+  ctx.save();
+
+  ctx.beginPath();
+  for (const region of regions) {
     if (region.points.length < 3) continue;
+    ctx.moveTo(region.points[0].x, region.points[0].y);
+    for (let i = 1; i < region.points.length; i++) {
+      ctx.lineTo(region.points[i].x, region.points[i].y);
+    }
+    ctx.closePath();
+  }
+  ctx.clip();
 
-    ctx.save();
-    ctx.shadowColor = 'rgba(0, 255, 204, 0.3)';
-    ctx.shadowBlur = 8 * pulse;
+  // Draw the background image through the clip
+  ctx.drawImage(bgImage, 0, 0, ARENA_WIDTH, ARENA_HEIGHT);
 
+  ctx.restore();
+
+  // Draw border outlines for each region (outside clip)
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 255, 204, 0.4)';
+  ctx.shadowBlur = 6 * pulse;
+  ctx.strokeStyle = CAPTURED_BORDER;
+  ctx.lineWidth = 1.5;
+
+  for (const region of regions) {
+    if (region.points.length < 3) continue;
     ctx.beginPath();
     ctx.moveTo(region.points[0].x, region.points[0].y);
     for (let i = 1; i < region.points.length; i++) {
       ctx.lineTo(region.points[i].x, region.points[i].y);
     }
     ctx.closePath();
-
-    ctx.fillStyle = CAPTURED_FILL;
-    ctx.fill();
-    ctx.strokeStyle = CAPTURED_BORDER;
-    ctx.lineWidth = 1.5;
     ctx.stroke();
-
-    ctx.restore();
   }
+  ctx.restore();
 }
 
 function drawTrail(
@@ -171,11 +280,14 @@ function drawTrail(
   }
   ctx.stroke();
 
-  // Draw dots along the trail for extra glow
-  ctx.fillStyle = TRAIL_COLOR;
-  for (let i = 0; i < trail.length; i += 3) {
+  // Animated energy dots along the trail
+  ctx.fillStyle = 'rgba(255, 100, 255, 0.8)';
+  const dotOffset = (time * 0.05) % 12;
+  for (let i = dotOffset; i < trail.length; i += 12) {
+    const idx = Math.floor(i);
+    if (idx >= trail.length) break;
     ctx.beginPath();
-    ctx.arc(trail[i].x, trail[i].y, 1.5, 0, Math.PI * 2);
+    ctx.arc(trail[idx].x, trail[idx].y, 1.8, 0, Math.PI * 2);
     ctx.fill();
   }
 
@@ -200,7 +312,7 @@ function drawOrb(
   // Glow ring
   const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius * 2.5);
   gradient.addColorStop(0, ORB_COLOR);
-  gradient.addColorStop(0.4, 'rgba(255, 204, 0, 0.4)');
+  gradient.addColorStop(0.4, 'rgba(255, 204, 0, 0.3)');
   gradient.addColorStop(1, 'rgba(255, 204, 0, 0)');
   ctx.fillStyle = gradient;
   ctx.beginPath();
@@ -217,22 +329,20 @@ function drawOrb(
   ctx.arc(x, y, radius, 0, Math.PI * 2);
   ctx.fill();
 
-  // Small electric sparks
+  // Electric sparks — jagged lines
   ctx.strokeStyle = 'rgba(255, 255, 200, 0.6)';
   ctx.lineWidth = 1;
-  const sparkCount = 4;
+  const sparkCount = 5;
   for (let i = 0; i < sparkCount; i++) {
-    const angle = (time * 0.01 + (i * Math.PI * 2) / sparkCount) % (Math.PI * 2);
-    const sparkLen = radius * (1.5 + 0.5 * Math.sin(time * 0.01 + i));
+    const angle = (time * 0.008 + (i * Math.PI * 2) / sparkCount) % (Math.PI * 2);
+    const sparkLen = radius * (1.4 + 0.5 * Math.sin(time * 0.012 + i * 2.3));
+    const midAngle = angle + (Math.sin(time * 0.02 + i) * 0.3);
+    const midLen = radius * (0.9 + 0.3 * Math.sin(time * 0.015 + i));
+
     ctx.beginPath();
-    ctx.moveTo(
-      x + Math.cos(angle) * radius,
-      y + Math.sin(angle) * radius
-    );
-    ctx.lineTo(
-      x + Math.cos(angle) * sparkLen,
-      y + Math.sin(angle) * sparkLen
-    );
+    ctx.moveTo(x + Math.cos(angle) * radius, y + Math.sin(angle) * radius);
+    ctx.lineTo(x + Math.cos(midAngle) * midLen, y + Math.sin(midAngle) * midLen);
+    ctx.lineTo(x + Math.cos(angle) * sparkLen, y + Math.sin(angle) * sparkLen);
     ctx.stroke();
   }
 
@@ -241,12 +351,17 @@ function drawOrb(
 
 function drawPlayer(
   ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
+  player: Player,
   time: number
 ): void {
+  const { x, y, invulnFrames } = player;
   const pulse = 0.8 + 0.2 * Math.sin(time * 0.004);
   const half = PLAYER_SIZE / 2;
+
+  // Blink during invulnerability
+  if (invulnFrames > 0 && Math.floor(time / 80) % 2 === 0) {
+    return;
+  }
 
   ctx.save();
 
@@ -269,6 +384,15 @@ function drawPlayer(
   ctx.beginPath();
   ctx.arc(x, y, 2, 0, Math.PI * 2);
   ctx.fill();
+
+  // Outer ring when trailing
+  if (player.trail.length > 0) {
+    ctx.strokeStyle = 'rgba(255, 0, 255, 0.5)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(x, y, half + 3 + Math.sin(time * 0.01) * 1.5, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 
   ctx.restore();
 }

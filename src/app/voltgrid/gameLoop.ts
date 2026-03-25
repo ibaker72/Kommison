@@ -4,25 +4,29 @@ import {
   InputState,
   CapturedRegion,
 } from './types';
+import type { Orb } from './types';
 import {
   ARENA_WIDTH,
   ARENA_HEIGHT,
   BORDER_WIDTH,
-  PLAYER_SPEED,
+  PLAYER_SPEED_BORDER,
+  PLAYER_SPEED_TRAIL,
   ORB_BASE_SPEED,
   ORB_RADIUS,
   INITIAL_LIVES,
   WIN_PERCENTAGE,
+  INVULN_FRAMES,
 } from './constants';
-import type { Orb } from './types';
 import {
   isOnBorder,
   directionFromKeys,
   clamp,
+  snapToBorder,
   pointInPolygon,
 } from './utils';
 import {
   orbCollidesWithTrail,
+  selfTrailCollision,
   bounceOrb,
   buildCapturePolygon,
   calculateRevealPercentage,
@@ -40,6 +44,7 @@ export function createInitialState(): GameState {
       onBorder: true,
       trail: [],
       lives: INITIAL_LIVES,
+      invulnFrames: 0,
     },
     orbs: [createOrb()],
     capturedRegions: [],
@@ -51,11 +56,10 @@ export function createInitialState(): GameState {
 }
 
 function createOrb(): Orb {
-  const bw = BORDER_WIDTH;
   const angle = Math.random() * Math.PI * 2;
   return {
     x: ARENA_WIDTH / 2 + (Math.random() - 0.5) * 100,
-    y: ARENA_HEIGHT / 2 + (Math.random() - 0.5) * 100,
+    y: ARENA_HEIGHT / 2 + (Math.random() - 0.5) * 80,
     dx: Math.cos(angle) * ORB_BASE_SPEED,
     dy: Math.sin(angle) * ORB_BASE_SPEED,
     radius: ORB_RADIUS,
@@ -68,14 +72,19 @@ export function updateGame(state: GameState, input: InputState): GameState {
   if (state.phase !== 'playing') return state;
 
   const newState = { ...state };
-  const player = { ...state.player, trail: [...state.player.trail] };
+  const player: Player = { ...state.player, trail: [...state.player.trail] };
   const orbs = state.orbs.map((o) => ({ ...o }));
+
+  // Tick invulnerability
+  if (player.invulnFrames > 0) {
+    player.invulnFrames--;
+  }
 
   // Get direction from input
   const dir = directionFromKeys(input);
 
   // Update player position
-  updatePlayer(player, dir, state.capturedRegions);
+  const selfHit = updatePlayer(player, dir, state.capturedRegions);
 
   // Update orbs
   for (const orb of orbs) {
@@ -84,35 +93,37 @@ export function updateGame(state: GameState, input: InputState): GameState {
     bounceOrb(orb, state.capturedRegions);
   }
 
-  // Check trail collision with orbs
-  if (player.trail.length > 1) {
+  // Check for death: self-trail collision OR orb-trail collision
+  let died = selfHit;
+
+  if (!died && player.invulnFrames <= 0 && player.trail.length > 1) {
     for (const orb of orbs) {
       if (orbCollidesWithTrail(orb, player.trail)) {
-        // Lose a life, reset trail
-        player.lives--;
-        player.trail = [];
-        player.onBorder = true;
-
-        // Reset to border position
-        const bw = BORDER_WIDTH;
-        player.x = ARENA_WIDTH / 2;
-        player.y = bw / 2;
-        player.direction = { dx: 0, dy: 0 };
-
-        if (player.lives <= 0) {
-          newState.phase = 'lost';
-        }
+        died = true;
         break;
       }
     }
   }
 
+  if (died) {
+    player.lives--;
+    player.trail = [];
+    player.onBorder = true;
+    player.x = ARENA_WIDTH / 2;
+    player.y = BORDER_WIDTH / 2;
+    player.direction = { dx: 0, dy: 0 };
+    player.invulnFrames = INVULN_FRAMES;
+
+    if (player.lives <= 0) {
+      newState.phase = 'lost';
+    }
+  }
+
   // Check if player returned to border and has a trail
-  if (player.onBorder && player.trail.length > 2) {
+  if (!died && player.onBorder && player.trail.length > 2) {
     const polygon = buildCapturePolygon(
       player.trail,
       orbs,
-      state.capturedRegions
     );
 
     if (polygon && polygon.length >= 3) {
@@ -138,15 +149,16 @@ export function updateGame(state: GameState, input: InputState): GameState {
 
 // ─── Player Movement ──────────────────────────────────────────────
 
+/** Returns true if the player crossed their own trail (self-hit). */
 function updatePlayer(
   player: Player,
   dir: { dx: number; dy: number },
   capturedRegions: CapturedRegion[]
-): void {
-  if (dir.dx === 0 && dir.dy === 0) return;
+): boolean {
+  if (dir.dx === 0 && dir.dy === 0) return false;
 
   const bw = BORDER_WIDTH;
-  const speed = PLAYER_SPEED;
+  const speed = player.onBorder ? PLAYER_SPEED_BORDER : PLAYER_SPEED_TRAIL;
   const wasOnBorder = player.onBorder;
 
   let nx = player.x + dir.dx * speed;
@@ -159,33 +171,52 @@ function updatePlayer(
   // Check if on border
   const nowOnBorder = isOnBorder(nx, ny);
 
-  // If on border and trying to move along it
+  // Moving along the border
   if (wasOnBorder && nowOnBorder) {
-    // Just move along the border
-    player.x = nx;
-    player.y = ny;
+    // Snap to border edge for clean positioning
+    const snapped = snapToBorder(nx, ny);
+    player.x = snapped.x;
+    player.y = snapped.y;
     player.onBorder = true;
     player.direction = dir;
-    return;
+    return false;
   }
 
-  // If on border and moving inward — start trail
+  // Leaving the border — start trail
   if (wasOnBorder && !nowOnBorder) {
-    player.trail = [{ x: player.x, y: player.y }];
+    // Snap origin to border for clean polygon start
+    const snapped = snapToBorder(player.x, player.y);
+    player.trail = [{ x: snapped.x, y: snapped.y }];
     player.onBorder = false;
   }
 
-  // If moving in the field
+  // Moving in the field
   if (!nowOnBorder) {
-    // Don't allow moving into captured regions
+    // Block movement into captured regions
     for (const region of capturedRegions) {
       if (pointInPolygon({ x: nx, y: ny }, region.points)) {
-        return; // Block movement into captured area
+        // Instead of blocking, treat captured edge as a border reconnection
+        const snapped = snapToBorder(nx, ny);
+        player.x = snapped.x;
+        player.y = snapped.y;
+        player.onBorder = true;
+        if (player.trail.length > 0) {
+          player.trail.push({ x: snapped.x, y: snapped.y });
+        }
+        player.direction = dir;
+        return false;
       }
     }
 
-    // Check self-trail collision (don't allow crossing own trail)
-    // Simple: just prevent backtracking on trail
+    // Self-trail collision check
+    if (player.trail.length > 4) {
+      const from = { x: player.x, y: player.y };
+      const to = { x: nx, y: ny };
+      if (selfTrailCollision(from, to, player.trail, 4)) {
+        return true; // Signal death
+      }
+    }
+
     player.x = nx;
     player.y = ny;
     player.onBorder = false;
@@ -197,21 +228,22 @@ function updatePlayer(
     } else {
       const last = trail[trail.length - 1];
       const dist = Math.abs(nx - last.x) + Math.abs(ny - last.y);
-      if (dist >= 1) {
+      if (dist >= 2) {
         trail.push({ x: nx, y: ny });
       }
     }
   } else {
-    // Returning to border
-    player.x = nx;
-    player.y = ny;
+    // Returning to border — snap cleanly
+    const snapped = snapToBorder(nx, ny);
+    player.x = snapped.x;
+    player.y = snapped.y;
     player.onBorder = true;
 
-    // Add final point to trail
     if (player.trail.length > 0) {
-      player.trail.push({ x: nx, y: ny });
+      player.trail.push({ x: snapped.x, y: snapped.y });
     }
   }
 
   player.direction = dir;
+  return false;
 }
