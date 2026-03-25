@@ -33,3 +33,24 @@ body {
 .animate-fadeIn {
   animation: fadeIn 0.4s ease-out;
 }
+
+/* D-Pad touch buttons */
+.dpad-btn {
+  touch-action: none;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  background: rgba(0, 255, 204, 0.06);
+  border: 1px solid rgba(0, 255, 204, 0.15);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.1s, border-color 0.1s;
+}
+
+.dpad-btn:active {
+  background: rgba(0, 255, 204, 0.2);
+  border-color: rgba(0, 255, 204, 0.5);
+  box-shadow: 0 0 12px rgba(0, 255, 204, 0.3);
+}

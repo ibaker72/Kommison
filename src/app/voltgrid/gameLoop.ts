@@ -3,6 +3,7 @@ import {
   Player,
   InputState,
   CapturedRegion,
+  TrailChaser,
 } from './types';
 import type { Orb } from './types';
 import {
@@ -16,6 +17,7 @@ import {
   INITIAL_LIVES,
   WIN_PERCENTAGE,
   INVULN_FRAMES,
+  CHASER_SPEED,
 } from './constants';
 import {
   isOnBorder,
@@ -23,9 +25,11 @@ import {
   clamp,
   snapToBorder,
   pointInPolygon,
+  distance,
 } from './utils';
 import {
-  orbCollidesWithTrail,
+  findOrbTrailHitIndex,
+  orbHitsPlayer,
   selfTrailCollision,
   bounceOrb,
   buildCapturePolygon,
@@ -47,6 +51,7 @@ export function createInitialState(): GameState {
       invulnFrames: 0,
     },
     orbs: [createOrb()],
+    trailChaser: null,
     capturedRegions: [],
     revealPercentage: 0,
     phase: 'playing',
@@ -66,6 +71,67 @@ function createOrb(): Orb {
   };
 }
 
+// ─── Trail Chaser Logic ──────────────────────────────────────────
+
+/** Interpolate position along the trail at a fractional index */
+function getTrailPosition(trail: readonly { x: number; y: number }[], pos: number): { x: number; y: number } {
+  if (trail.length === 0) return { x: 0, y: 0 };
+  if (pos <= 0) return { x: trail[0].x, y: trail[0].y };
+  if (pos >= trail.length - 1) return { x: trail[trail.length - 1].x, y: trail[trail.length - 1].y };
+
+  const i = Math.floor(pos);
+  const t = pos - i;
+  const a = trail[i];
+  const b = trail[i + 1];
+  return {
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+  };
+}
+
+/** Advance chaser along the trail toward the player. Returns updated chaser or null if expired. */
+function updateChaser(chaser: TrailChaser, trail: readonly { x: number; y: number }[]): TrailChaser | null {
+  if (!chaser.active || trail.length < 2) return null;
+
+  // Move forward along the trail by distance
+  let remaining = CHASER_SPEED;
+  let pos = chaser.trailPos;
+
+  while (remaining > 0 && pos < trail.length - 1) {
+    const i = Math.floor(pos);
+    const t = pos - i;
+    if (i + 1 >= trail.length) break;
+
+    const a = trail[i];
+    const b = trail[i + 1];
+    const segLen = distance(a, b);
+
+    if (segLen === 0) {
+      pos = i + 1;
+      continue;
+    }
+
+    const distToEnd = segLen * (1 - t);
+
+    if (remaining >= distToEnd) {
+      remaining -= distToEnd;
+      pos = i + 1;
+    } else {
+      pos += (remaining / segLen);
+      remaining = 0;
+    }
+  }
+
+  const worldPos = getTrailPosition(trail, pos);
+
+  return {
+    trailPos: pos,
+    x: worldPos.x,
+    y: worldPos.y,
+    active: pos < trail.length - 1,
+  };
+}
+
 // ─── Game Update ──────────────────────────────────────────────────
 
 export function updateGame(state: GameState, input: InputState): GameState {
@@ -74,6 +140,7 @@ export function updateGame(state: GameState, input: InputState): GameState {
   const newState = { ...state };
   const player: Player = { ...state.player, trail: [...state.player.trail] };
   const orbs = state.orbs.map((o) => ({ ...o }));
+  let chaser = state.trailChaser ? { ...state.trailChaser } : null;
 
   // Tick invulnerability
   if (player.invulnFrames > 0) {
@@ -93,18 +160,48 @@ export function updateGame(state: GameState, input: InputState): GameState {
     bounceOrb(orb, state.capturedRegions);
   }
 
-  // Check for death: self-trail collision OR orb-trail collision
+  // ─── Death checks ────────────────────────────────────────────
   let died = selfHit;
 
-  if (!died && player.invulnFrames <= 0 && player.trail.length > 1) {
+  // 1) Direct orb → player collision (instant death)
+  if (!died && player.invulnFrames <= 0) {
     for (const orb of orbs) {
-      if (orbCollidesWithTrail(orb, player.trail)) {
+      if (orbHitsPlayer(orb, player.x, player.y)) {
         died = true;
         break;
       }
     }
   }
 
+  // 2) Orb touches trail → spawn chaser (NOT instant death)
+  if (!died && !chaser && player.invulnFrames <= 0 && player.trail.length > 1) {
+    for (const orb of orbs) {
+      const hitIdx = findOrbTrailHitIndex(orb, player.trail);
+      if (hitIdx >= 0) {
+        const worldPos = getTrailPosition(player.trail, hitIdx);
+        chaser = {
+          trailPos: hitIdx,
+          x: worldPos.x,
+          y: worldPos.y,
+          active: true,
+        };
+        break;
+      }
+    }
+  }
+
+  // 3) Update existing chaser — move it toward the player
+  if (chaser && chaser.active && player.trail.length >= 2) {
+    chaser = updateChaser(chaser, player.trail);
+
+    // If chaser reached the end of the trail (the player), it's a kill
+    if (chaser && chaser.trailPos >= player.trail.length - 1.5) {
+      died = true;
+      chaser = null;
+    }
+  }
+
+  // Handle death
   if (died) {
     player.lives--;
     player.trail = [];
@@ -113,18 +210,16 @@ export function updateGame(state: GameState, input: InputState): GameState {
     player.y = BORDER_WIDTH / 2;
     player.direction = { dx: 0, dy: 0 };
     player.invulnFrames = INVULN_FRAMES;
+    chaser = null;
 
     if (player.lives <= 0) {
       newState.phase = 'lost';
     }
   }
 
-  // Check if player returned to border and has a trail
+  // Check if player returned to border and has a trail → capture
   if (!died && player.onBorder && player.trail.length > 2) {
-    const polygon = buildCapturePolygon(
-      player.trail,
-      orbs,
-    );
+    const polygon = buildCapturePolygon(player.trail, orbs);
 
     if (polygon && polygon.length >= 3) {
       const newRegions = [...state.capturedRegions, { points: polygon }];
@@ -139,17 +234,18 @@ export function updateGame(state: GameState, input: InputState): GameState {
     }
 
     player.trail = [];
+    chaser = null; // Player survived — dismiss chaser
   }
 
   newState.player = player;
   newState.orbs = orbs;
+  newState.trailChaser = chaser;
 
   return newState;
 }
 
 // ─── Player Movement ──────────────────────────────────────────────
 
-/** Returns true if the player crossed their own trail (self-hit). */
 function updatePlayer(
   player: Player,
   dir: { dx: number; dy: number },
@@ -164,16 +260,12 @@ function updatePlayer(
   let nx = player.x + dir.dx * speed;
   let ny = player.y + dir.dy * speed;
 
-  // Clamp to arena
   nx = clamp(nx, bw / 2, ARENA_WIDTH - bw / 2);
   ny = clamp(ny, bw / 2, ARENA_HEIGHT - bw / 2);
 
-  // Check if on border
   const nowOnBorder = isOnBorder(nx, ny);
 
-  // Moving along the border
   if (wasOnBorder && nowOnBorder) {
-    // Snap to border edge for clean positioning
     const snapped = snapToBorder(nx, ny);
     player.x = snapped.x;
     player.y = snapped.y;
@@ -182,20 +274,15 @@ function updatePlayer(
     return false;
   }
 
-  // Leaving the border — start trail
   if (wasOnBorder && !nowOnBorder) {
-    // Snap origin to border for clean polygon start
     const snapped = snapToBorder(player.x, player.y);
     player.trail = [{ x: snapped.x, y: snapped.y }];
     player.onBorder = false;
   }
 
-  // Moving in the field
   if (!nowOnBorder) {
-    // Block movement into captured regions
     for (const region of capturedRegions) {
       if (pointInPolygon({ x: nx, y: ny }, region.points)) {
-        // Instead of blocking, treat captured edge as a border reconnection
         const snapped = snapToBorder(nx, ny);
         player.x = snapped.x;
         player.y = snapped.y;
@@ -208,12 +295,11 @@ function updatePlayer(
       }
     }
 
-    // Self-trail collision check
     if (player.trail.length > 4) {
       const from = { x: player.x, y: player.y };
       const to = { x: nx, y: ny };
       if (selfTrailCollision(from, to, player.trail, 4)) {
-        return true; // Signal death
+        return true;
       }
     }
 
@@ -221,7 +307,6 @@ function updatePlayer(
     player.y = ny;
     player.onBorder = false;
 
-    // Add to trail (only if moved enough distance from last point)
     const trail = player.trail;
     if (trail.length === 0) {
       trail.push({ x: nx, y: ny });
@@ -233,7 +318,6 @@ function updatePlayer(
       }
     }
   } else {
-    // Returning to border — snap cleanly
     const snapped = snapToBorder(nx, ny);
     player.x = snapped.x;
     player.y = snapped.y;

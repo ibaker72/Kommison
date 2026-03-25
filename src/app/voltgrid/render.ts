@@ -1,4 +1,4 @@
-import { GameState, CapturedRegion, Player } from './types';
+import { GameState, CapturedRegion, Player, TrailChaser } from './types';
 import {
   ARENA_WIDTH,
   ARENA_HEIGHT,
@@ -8,9 +8,14 @@ import {
   PLAYER_GLOW_COLOR,
   TRAIL_COLOR,
   TRAIL_GLOW_COLOR,
+  TRAIL_INFECTED_COLOR,
+  TRAIL_INFECTED_GLOW,
   TRAIL_WIDTH,
   ORB_COLOR,
   ORB_GLOW_COLOR,
+  CHASER_RADIUS,
+  CHASER_COLOR,
+  CHASER_GLOW,
   GRID_SPACING,
   GRID_COLOR,
   BG_COLOR,
@@ -24,7 +29,6 @@ import {
 
 let bgCanvas: OffscreenCanvas | null = null;
 
-/** Generate a procedural cyber/neon background image once */
 function getBackgroundImage(): OffscreenCanvas {
   if (bgCanvas) return bgCanvas;
 
@@ -32,7 +36,6 @@ function getBackgroundImage(): OffscreenCanvas {
   const ctx = bgCanvas.getContext('2d')!;
   const bw = BORDER_WIDTH;
 
-  // Deep gradient base
   const grad = ctx.createLinearGradient(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
   grad.addColorStop(0, '#0a1628');
   grad.addColorStop(0.3, '#0d1f3c');
@@ -42,12 +45,10 @@ function getBackgroundImage(): OffscreenCanvas {
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
 
-  // Neon circuit pattern
   ctx.strokeStyle = 'rgba(0, 255, 204, 0.12)';
   ctx.lineWidth = 1;
   const spacing = 20;
 
-  // Horizontal circuit lines
   for (let y = bw; y < ARENA_HEIGHT - bw; y += spacing) {
     ctx.beginPath();
     ctx.moveTo(bw, y);
@@ -67,7 +68,6 @@ function getBackgroundImage(): OffscreenCanvas {
     ctx.stroke();
   }
 
-  // Glowing nodes at intersections
   ctx.fillStyle = 'rgba(0, 255, 204, 0.25)';
   for (let i = 0; i < 40; i++) {
     const nx = bw + 20 + Math.random() * (ARENA_WIDTH - 2 * bw - 40);
@@ -78,7 +78,6 @@ function getBackgroundImage(): OffscreenCanvas {
     ctx.fill();
   }
 
-  // Larger glowing spots
   for (let i = 0; i < 8; i++) {
     const sx = bw + 40 + Math.random() * (ARENA_WIDTH - 2 * bw - 80);
     const sy = bw + 40 + Math.random() * (ARENA_HEIGHT - 2 * bw - 80);
@@ -90,7 +89,6 @@ function getBackgroundImage(): OffscreenCanvas {
     ctx.fillRect(sx - 60, sy - 60, 120, 120);
   }
 
-  // Magenta accent streaks
   ctx.strokeStyle = 'rgba(255, 0, 255, 0.06)';
   ctx.lineWidth = 1.5;
   for (let i = 0; i < 12; i++) {
@@ -107,7 +105,6 @@ function getBackgroundImage(): OffscreenCanvas {
   return bgCanvas;
 }
 
-/** Reset background cache on restart */
 export function resetBackgroundCache(): void {
   bgCanvas = null;
 }
@@ -129,35 +126,27 @@ export function render(
 
   ctx.save();
 
-  // Clear background
   ctx.fillStyle = BG_COLOR;
   ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
-  // Transform to arena space
   ctx.translate(offsetX, offsetY);
   ctx.scale(scale, scale);
 
-  // Draw dark arena background
   drawArenaBackground(ctx);
-
-  // Draw subtle grid
   drawGrid(ctx, time);
-
-  // Draw revealed background image through captured regions
   drawRevealedRegions(ctx, state.capturedRegions, time);
-
-  // Draw arena border
   drawArenaBorder(ctx, time);
-
-  // Draw active trail
   drawTrail(ctx, state, time);
 
-  // Draw orbs
+  // Draw trail chaser
+  if (state.trailChaser && state.trailChaser.active) {
+    drawChaser(ctx, state.trailChaser, time);
+  }
+
   for (const orb of state.orbs) {
     drawOrb(ctx, orb.x, orb.y, orb.radius, time);
   }
 
-  // Draw player
   drawPlayer(ctx, state.player, time);
 
   ctx.restore();
@@ -205,7 +194,6 @@ function drawArenaBorder(ctx: CanvasRenderingContext2D, time: number): void {
   ctx.restore();
 }
 
-/** Draw captured regions with the revealed background image clipped through */
 function drawRevealedRegions(
   ctx: CanvasRenderingContext2D,
   regions: CapturedRegion[],
@@ -216,9 +204,7 @@ function drawRevealedRegions(
   const bgImage = getBackgroundImage();
   const pulse = 0.85 + 0.15 * Math.sin(time * 0.003);
 
-  // Build a combined clip path for all regions
   ctx.save();
-
   ctx.beginPath();
   for (const region of regions) {
     if (region.points.length < 3) continue;
@@ -229,19 +215,14 @@ function drawRevealedRegions(
     ctx.closePath();
   }
   ctx.clip();
-
-  // Draw the background image through the clip
   ctx.drawImage(bgImage, 0, 0, ARENA_WIDTH, ARENA_HEIGHT);
-
   ctx.restore();
 
-  // Draw border outlines for each region (outside clip)
   ctx.save();
   ctx.shadowColor = 'rgba(0, 255, 204, 0.4)';
   ctx.shadowBlur = 6 * pulse;
   ctx.strokeStyle = CAPTURED_BORDER;
   ctx.lineWidth = 1.5;
-
   for (const region of regions) {
     if (region.points.length < 3) continue;
     ctx.beginPath();
@@ -263,25 +244,63 @@ function drawTrail(
   const trail = state.player.trail;
   if (trail.length < 2) return;
 
+  const infected = state.trailChaser !== null && state.trailChaser.active;
+  const chaserPos = state.trailChaser?.trailPos ?? 0;
   const pulse = 0.7 + 0.3 * Math.sin(time * 0.005);
 
   ctx.save();
-  ctx.shadowColor = TRAIL_GLOW_COLOR;
-  ctx.shadowBlur = 10 * pulse;
-  ctx.strokeStyle = TRAIL_COLOR;
-  ctx.lineWidth = TRAIL_WIDTH;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
 
-  ctx.beginPath();
-  ctx.moveTo(trail[0].x, trail[0].y);
-  for (let i = 1; i < trail.length; i++) {
-    ctx.lineTo(trail[i].x, trail[i].y);
-  }
-  ctx.stroke();
+  if (infected) {
+    // Draw the "consumed" portion behind the chaser in red
+    const splitIdx = Math.floor(chaserPos);
+    if (splitIdx > 0) {
+      ctx.shadowColor = TRAIL_INFECTED_GLOW;
+      ctx.shadowBlur = 12 * pulse;
+      ctx.strokeStyle = TRAIL_INFECTED_COLOR;
+      ctx.lineWidth = TRAIL_WIDTH + 1;
+      ctx.beginPath();
+      ctx.moveTo(trail[0].x, trail[0].y);
+      for (let i = 1; i <= Math.min(splitIdx + 1, trail.length - 1); i++) {
+        ctx.lineTo(trail[i].x, trail[i].y);
+      }
+      ctx.stroke();
+    }
 
-  // Animated energy dots along the trail
-  ctx.fillStyle = 'rgba(255, 100, 255, 0.8)';
+    // Draw the "safe" portion ahead of the chaser in magenta (pulsing faster)
+    const fastPulse = 0.5 + 0.5 * Math.sin(time * 0.015);
+    ctx.shadowColor = TRAIL_GLOW_COLOR;
+    ctx.shadowBlur = 14 * fastPulse;
+    ctx.strokeStyle = TRAIL_COLOR;
+    ctx.lineWidth = TRAIL_WIDTH;
+    const startIdx = Math.max(0, splitIdx);
+    if (startIdx < trail.length - 1) {
+      ctx.beginPath();
+      ctx.moveTo(trail[startIdx].x, trail[startIdx].y);
+      for (let i = startIdx + 1; i < trail.length; i++) {
+        ctx.lineTo(trail[i].x, trail[i].y);
+      }
+      ctx.stroke();
+    }
+  } else {
+    // Normal trail rendering
+    ctx.shadowColor = TRAIL_GLOW_COLOR;
+    ctx.shadowBlur = 10 * pulse;
+    ctx.strokeStyle = TRAIL_COLOR;
+    ctx.lineWidth = TRAIL_WIDTH;
+
+    ctx.beginPath();
+    ctx.moveTo(trail[0].x, trail[0].y);
+    for (let i = 1; i < trail.length; i++) {
+      ctx.lineTo(trail[i].x, trail[i].y);
+    }
+    ctx.stroke();
+  }
+
+  // Animated energy dots
+  const dotColor = infected ? 'rgba(255, 80, 80, 0.8)' : 'rgba(255, 100, 255, 0.8)';
+  ctx.fillStyle = dotColor;
   const dotOffset = (time * 0.05) % 12;
   for (let i = dotOffset; i < trail.length; i += 12) {
     const idx = Math.floor(i);
@@ -289,6 +308,62 @@ function drawTrail(
     ctx.beginPath();
     ctx.arc(trail[idx].x, trail[idx].y, 1.8, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  ctx.restore();
+}
+
+// ─── Trail Chaser Renderer ───────────────────────────────────────
+
+function drawChaser(
+  ctx: CanvasRenderingContext2D,
+  chaser: TrailChaser,
+  time: number
+): void {
+  const { x, y } = chaser;
+  const r = CHASER_RADIUS;
+  const pulse = 0.7 + 0.3 * Math.sin(time * 0.01);
+
+  ctx.save();
+
+  // Danger glow
+  ctx.shadowColor = CHASER_GLOW;
+  ctx.shadowBlur = 18 * pulse;
+
+  // Outer ring glow
+  const outerGrad = ctx.createRadialGradient(x, y, 0, x, y, r * 3);
+  outerGrad.addColorStop(0, 'rgba(255, 68, 68, 0.5)');
+  outerGrad.addColorStop(0.5, 'rgba(255, 68, 68, 0.15)');
+  outerGrad.addColorStop(1, 'rgba(255, 68, 68, 0)');
+  ctx.fillStyle = outerGrad;
+  ctx.beginPath();
+  ctx.arc(x, y, r * 3, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Core
+  const coreGrad = ctx.createRadialGradient(x, y, 0, x, y, r);
+  coreGrad.addColorStop(0, '#ffffff');
+  coreGrad.addColorStop(0.3, CHASER_COLOR);
+  coreGrad.addColorStop(1, '#cc0000');
+  ctx.fillStyle = coreGrad;
+  ctx.beginPath();
+  ctx.arc(x, y, r, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Electric arcs spinning around the chaser
+  ctx.strokeStyle = 'rgba(255, 200, 150, 0.7)';
+  ctx.lineWidth = 1;
+  const arcCount = 3;
+  for (let i = 0; i < arcCount; i++) {
+    const angle = (time * 0.015 + (i * Math.PI * 2) / arcCount) % (Math.PI * 2);
+    const len = r * (1.5 + 0.4 * Math.sin(time * 0.02 + i * 1.7));
+    const midAngle = angle + Math.sin(time * 0.03 + i) * 0.5;
+
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(angle) * r * 0.5, y + Math.sin(angle) * r * 0.5);
+    ctx.lineTo(x + Math.cos(midAngle) * len * 0.7, y + Math.sin(midAngle) * len * 0.7);
+    ctx.lineTo(x + Math.cos(angle) * len, y + Math.sin(angle) * len);
+    ctx.stroke();
   }
 
   ctx.restore();
@@ -305,11 +380,9 @@ function drawOrb(
 
   ctx.save();
 
-  // Outer glow
   ctx.shadowColor = ORB_GLOW_COLOR;
   ctx.shadowBlur = 20 * pulse;
 
-  // Glow ring
   const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius * 2.5);
   gradient.addColorStop(0, ORB_COLOR);
   gradient.addColorStop(0.4, 'rgba(255, 204, 0, 0.3)');
@@ -319,7 +392,6 @@ function drawOrb(
   ctx.arc(x, y, radius * 2.5, 0, Math.PI * 2);
   ctx.fill();
 
-  // Core orb
   const coreGrad = ctx.createRadialGradient(x - radius * 0.2, y - radius * 0.2, 0, x, y, radius);
   coreGrad.addColorStop(0, '#ffffff');
   coreGrad.addColorStop(0.3, ORB_COLOR);
@@ -329,7 +401,6 @@ function drawOrb(
   ctx.arc(x, y, radius, 0, Math.PI * 2);
   ctx.fill();
 
-  // Electric sparks — jagged lines
   ctx.strokeStyle = 'rgba(255, 255, 200, 0.6)';
   ctx.lineWidth = 1;
   const sparkCount = 5;
@@ -358,18 +429,15 @@ function drawPlayer(
   const pulse = 0.8 + 0.2 * Math.sin(time * 0.004);
   const half = PLAYER_SIZE / 2;
 
-  // Blink during invulnerability
   if (invulnFrames > 0 && Math.floor(time / 80) % 2 === 0) {
     return;
   }
 
   ctx.save();
 
-  // Glow
   ctx.shadowColor = PLAYER_GLOW_COLOR;
   ctx.shadowBlur = 15 * pulse;
 
-  // Diamond shape
   ctx.fillStyle = PLAYER_COLOR;
   ctx.beginPath();
   ctx.moveTo(x, y - half);
@@ -379,13 +447,11 @@ function drawPlayer(
   ctx.closePath();
   ctx.fill();
 
-  // Inner bright core
   ctx.fillStyle = '#ffffff';
   ctx.beginPath();
   ctx.arc(x, y, 2, 0, Math.PI * 2);
   ctx.fill();
 
-  // Outer ring when trailing
   if (player.trail.length > 0) {
     ctx.strokeStyle = 'rgba(255, 0, 255, 0.5)';
     ctx.lineWidth = 1;

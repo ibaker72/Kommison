@@ -17,8 +17,20 @@ export default function VoltGrid() {
   const [revealPct, setRevealPct] = useState(0);
   const [lives, setLives] = useState(INITIAL_LIVES);
   const [phase, setPhase] = useState<GameState['phase']>('playing');
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+  const [hasChaser, setHasChaser] = useState(false);
 
-  // ─── Input Handling ──────────────────────────────────────────
+  // ─── Detect Touch ──────────────────────────────────────────
+
+  useEffect(() => {
+    const check = () => {
+      setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0);
+    };
+    check();
+    window.addEventListener('touchstart', () => setIsTouchDevice(true), { once: true });
+  }, []);
+
+  // ─── Keyboard Input ────────────────────────────────────────
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     const input = inputRef.current;
@@ -44,6 +56,26 @@ export default function VoltGrid() {
     }
   }, []);
 
+  // ─── Touch D-Pad ───────────────────────────────────────────
+
+  const setTouchDir = useCallback((dir: 'up' | 'down' | 'left' | 'right' | 'none') => {
+    const input = inputRef.current;
+    input.up = dir === 'up';
+    input.down = dir === 'down';
+    input.left = dir === 'left';
+    input.right = dir === 'right';
+  }, []);
+
+  const handleDpadTouch = useCallback((dir: 'up' | 'down' | 'left' | 'right') => (e: React.TouchEvent) => {
+    e.preventDefault();
+    setTouchDir(dir);
+  }, [setTouchDir]);
+
+  const handleDpadRelease = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    setTouchDir('none');
+  }, [setTouchDir]);
+
   // ─── Restart ─────────────────────────────────────────────────
 
   const restart = useCallback(() => {
@@ -53,6 +85,7 @@ export default function VoltGrid() {
     setRevealPct(0);
     setLives(INITIAL_LIVES);
     setPhase('playing');
+    setHasChaser(false);
   }, []);
 
   // ─── Canvas Resize ──────────────────────────────────────────
@@ -97,6 +130,7 @@ export default function VoltGrid() {
       setRevealPct(s.revealPercentage);
       setLives(s.player.lives);
       setPhase(s.phase);
+      setHasChaser(s.trailChaser !== null && s.trailChaser.active);
 
       const canvas = canvasRef.current;
       if (canvas) {
@@ -122,149 +156,222 @@ export default function VoltGrid() {
   // ─── Render ─────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-[#050510] text-white flex flex-col items-center justify-center px-3 py-4 sm:px-4 sm:py-6 selection:bg-cyan-500/30">
-      {/* Header */}
-      <div className="w-full max-w-[700px] mb-3 sm:mb-4">
-        <h1 className="text-2xl sm:text-4xl font-bold tracking-[0.25em] text-center bg-gradient-to-r from-cyan-400 via-teal-300 to-cyan-500 bg-clip-text text-transparent">
-          VOLTGRID
-        </h1>
-        <p className="text-center text-cyan-600/50 text-[10px] sm:text-xs tracking-[0.4em] mt-0.5 uppercase">
-          Territory Capture
-        </p>
-      </div>
+    <div className="h-dvh bg-[#050510] text-white flex flex-col overflow-hidden select-none">
 
-      {/* HUD */}
-      <div className="w-full max-w-[700px] flex items-center justify-between mb-2 sm:mb-3 px-1 font-mono text-sm">
-        <div className="flex items-center gap-3 sm:gap-4">
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            <span className="text-cyan-600/60 text-[10px] sm:text-xs uppercase tracking-wider">Reveal</span>
-            <span className="text-cyan-300 font-bold text-base sm:text-lg tabular-nums min-w-[4ch] text-right">
-              {revealPct.toFixed(1)}%
+      {/* ── Top HUD ─────────────────────────────────────────── */}
+      <div className="shrink-0 px-3 sm:px-6 pt-2 pb-1 sm:pt-3 sm:pb-2">
+        {/* Title row */}
+        <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+          <div>
+            <h1 className="text-lg sm:text-2xl font-bold tracking-[0.2em] bg-gradient-to-r from-cyan-400 via-teal-300 to-cyan-500 bg-clip-text text-transparent leading-tight">
+              VOLTGRID
+            </h1>
+          </div>
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="flex items-center gap-1.5">
+              <span className="text-cyan-600/50 text-[9px] sm:text-[10px] uppercase tracking-wider">Lives</span>
+              <div className="flex gap-1">
+                {Array.from({ length: INITIAL_LIVES }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full transition-all duration-300 ${
+                      i < lives
+                        ? 'bg-cyan-400 shadow-[0_0_6px_rgba(0,255,204,0.6)]'
+                        : 'bg-cyan-900/30'
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+            <button
+              onClick={restart}
+              className="text-[9px] sm:text-[10px] px-2 sm:px-2.5 py-0.5 border border-cyan-800/30 rounded text-cyan-600/60 hover:text-cyan-300 hover:border-cyan-500/50 transition-colors uppercase tracking-wider"
+            >
+              Restart
+            </button>
+          </div>
+        </div>
+
+        {/* Stats + progress */}
+        <div className="flex items-center gap-3 mb-1">
+          <span className="text-cyan-300 font-bold text-sm sm:text-base tabular-nums font-mono">
+            {revealPct.toFixed(1)}%
+          </span>
+          <div className="flex-1 h-1 sm:h-1.5 bg-cyan-950/30 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-cyan-500 to-teal-400 rounded-full transition-all duration-200 shadow-[0_0_8px_rgba(0,255,204,0.4)]"
+              style={{ width: `${Math.min(100, (revealPct / WIN_PERCENTAGE) * 100)}%` }}
+            />
+          </div>
+          <span className="text-cyan-700/50 text-[10px] sm:text-xs font-mono">{WIN_PERCENTAGE}%</span>
+        </div>
+
+        {/* Chaser warning */}
+        {hasChaser && (
+          <div className="text-center">
+            <span className="text-red-400/90 text-[10px] sm:text-xs tracking-wider uppercase animate-pulse font-bold">
+              Trail breached — reach the wall!
             </span>
           </div>
-          <div className="h-3.5 w-px bg-cyan-800/30" />
-          <div className="flex items-center gap-1">
-            <span className="text-cyan-600/50 text-[10px] sm:text-xs uppercase tracking-wider">Goal</span>
-            <span className="text-cyan-700/70 text-xs sm:text-sm">{WIN_PERCENTAGE}%</span>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3 sm:gap-4">
-          <div className="flex items-center gap-1.5">
-            <span className="text-cyan-600/60 text-[10px] sm:text-xs uppercase tracking-wider">Lives</span>
-            <div className="flex gap-1">
-              {Array.from({ length: INITIAL_LIVES }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full transition-all duration-300 ${
-                    i < lives
-                      ? 'bg-cyan-400 shadow-[0_0_6px_rgba(0,255,204,0.6)]'
-                      : 'bg-cyan-900/30'
-                  }`}
-                />
-              ))}
-            </div>
-          </div>
-          <button
-            onClick={restart}
-            className="text-[10px] sm:text-xs px-2.5 sm:px-3 py-0.5 sm:py-1 border border-cyan-800/40 rounded text-cyan-600/70 hover:text-cyan-300 hover:border-cyan-500/50 transition-colors uppercase tracking-wider"
-          >
-            Restart
-          </button>
-        </div>
+        )}
       </div>
 
-      {/* Progress Bar */}
-      <div className="w-full max-w-[700px] mb-2 sm:mb-3">
-        <div className="h-1 sm:h-1.5 bg-cyan-950/30 rounded-full overflow-hidden">
-          <div
-            className="h-full bg-gradient-to-r from-cyan-500 to-teal-400 rounded-full transition-all duration-200 shadow-[0_0_8px_rgba(0,255,204,0.4)]"
-            style={{ width: `${Math.min(100, (revealPct / WIN_PERCENTAGE) * 100)}%` }}
+      {/* ── Canvas Area (fills remaining space) ─────────────── */}
+      <div className="flex-1 min-h-0 relative flex items-center justify-center px-1 sm:px-4">
+        <div className="relative w-full h-full max-w-[900px] flex items-center justify-center">
+          <canvas
+            ref={canvasRef}
+            className="block rounded-sm"
+            tabIndex={0}
           />
+
+          {/* Win Overlay */}
+          {phase === 'won' && (
+            <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-20 animate-fadeIn rounded-sm">
+              <div className="relative">
+                <div className="absolute inset-0 blur-2xl bg-cyan-500/20 rounded-full" />
+                <div className="relative text-3xl sm:text-5xl font-bold tracking-wider bg-gradient-to-r from-cyan-300 via-teal-200 to-cyan-400 bg-clip-text text-transparent mb-3">
+                  GRID CAPTURED
+                </div>
+              </div>
+              <div className="h-px w-24 sm:w-32 bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent mb-3 sm:mb-4" />
+              <p className="text-cyan-300/70 text-xs sm:text-base mb-1 tracking-wide">
+                {revealPct.toFixed(1)}% territory secured
+              </p>
+              <p className="text-cyan-700/50 text-[10px] sm:text-sm mb-5 sm:mb-6 tracking-wide">
+                {lives} {lives === 1 ? 'life' : 'lives'} remaining
+              </p>
+              <button
+                onClick={restart}
+                className="group relative px-6 sm:px-8 py-2 sm:py-3 rounded-lg text-cyan-300 uppercase tracking-[0.2em] text-[10px] sm:text-sm font-bold transition-all overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-cyan-500/15 border border-cyan-500/40 rounded-lg group-hover:bg-cyan-500/25 group-hover:border-cyan-400/60 transition-all" />
+                <div className="absolute inset-0 shadow-[0_0_20px_rgba(0,255,204,0.15)] group-hover:shadow-[0_0_30px_rgba(0,255,204,0.25)] transition-all rounded-lg" />
+                <span className="relative">Play Again</span>
+              </button>
+            </div>
+          )}
+
+          {/* Game Over Overlay */}
+          {phase === 'lost' && (
+            <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-20 animate-fadeIn rounded-sm">
+              <div className="relative">
+                <div className="absolute inset-0 blur-2xl bg-red-500/15 rounded-full" />
+                <div className="relative text-3xl sm:text-5xl font-bold tracking-wider bg-gradient-to-r from-red-400 via-orange-300 to-red-500 bg-clip-text text-transparent mb-3">
+                  OVERLOADED
+                </div>
+              </div>
+              <div className="h-px w-24 sm:w-32 bg-gradient-to-r from-transparent via-red-500/30 to-transparent mb-3 sm:mb-4" />
+              <p className="text-red-300/70 text-xs sm:text-base mb-1 tracking-wide">
+                Grid breach at {revealPct.toFixed(1)}%
+              </p>
+              <p className="text-red-700/50 text-[10px] sm:text-sm mb-5 sm:mb-6 tracking-wide">
+                Target was {WIN_PERCENTAGE}%
+              </p>
+              <button
+                onClick={restart}
+                className="group relative px-6 sm:px-8 py-2 sm:py-3 rounded-lg text-red-300 uppercase tracking-[0.2em] text-[10px] sm:text-sm font-bold transition-all overflow-hidden"
+              >
+                <div className="absolute inset-0 bg-red-500/15 border border-red-500/40 rounded-lg group-hover:bg-red-500/25 group-hover:border-red-400/60 transition-all" />
+                <div className="absolute inset-0 shadow-[0_0_20px_rgba(255,80,80,0.15)] group-hover:shadow-[0_0_30px_rgba(255,80,80,0.25)] transition-all rounded-lg" />
+                <span className="relative">Try Again</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Canvas Container */}
-      <div className="relative w-full max-w-[700px] aspect-[600/480] rounded-lg overflow-hidden border border-cyan-900/20 shadow-[0_0_40px_rgba(0,255,204,0.06),inset_0_0_30px_rgba(0,0,0,0.3)]">
-        <canvas
-          ref={canvasRef}
-          className="w-full h-full block"
-          tabIndex={0}
-        />
-
-        {/* Win Overlay */}
-        {phase === 'won' && (
-          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-10 animate-fadeIn">
-            <div className="relative">
-              <div className="absolute inset-0 blur-2xl bg-cyan-500/20 rounded-full" />
-              <div className="relative text-4xl sm:text-5xl font-bold tracking-wider bg-gradient-to-r from-cyan-300 via-teal-200 to-cyan-400 bg-clip-text text-transparent mb-3">
-                GRID CAPTURED
-              </div>
+      {/* ── Bottom: Instructions (desktop) / D-pad (touch) ── */}
+      <div className="shrink-0 px-3 sm:px-6 pb-2 sm:pb-3 pt-1 sm:pt-2">
+        {isTouchDevice ? (
+          /* Touch D-Pad */
+          <div className="flex justify-center">
+            <div className="relative w-[140px] h-[140px] sm:w-[160px] sm:h-[160px]">
+              {/* Up */}
+              <button
+                className="dpad-btn absolute top-0 left-1/2 -translate-x-1/2 w-[44px] h-[44px] sm:w-[50px] sm:h-[50px]"
+                onTouchStart={handleDpadTouch('up')}
+                onTouchEnd={handleDpadRelease}
+                onTouchCancel={handleDpadRelease}
+              >
+                <DpadArrow direction="up" />
+              </button>
+              {/* Down */}
+              <button
+                className="dpad-btn absolute bottom-0 left-1/2 -translate-x-1/2 w-[44px] h-[44px] sm:w-[50px] sm:h-[50px]"
+                onTouchStart={handleDpadTouch('down')}
+                onTouchEnd={handleDpadRelease}
+                onTouchCancel={handleDpadRelease}
+              >
+                <DpadArrow direction="down" />
+              </button>
+              {/* Left */}
+              <button
+                className="dpad-btn absolute left-0 top-1/2 -translate-y-1/2 w-[44px] h-[44px] sm:w-[50px] sm:h-[50px]"
+                onTouchStart={handleDpadTouch('left')}
+                onTouchEnd={handleDpadRelease}
+                onTouchCancel={handleDpadRelease}
+              >
+                <DpadArrow direction="left" />
+              </button>
+              {/* Right */}
+              <button
+                className="dpad-btn absolute right-0 top-1/2 -translate-y-1/2 w-[44px] h-[44px] sm:w-[50px] sm:h-[50px]"
+                onTouchStart={handleDpadTouch('right')}
+                onTouchEnd={handleDpadRelease}
+                onTouchCancel={handleDpadRelease}
+              >
+                <DpadArrow direction="right" />
+              </button>
+              {/* Center dot */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-cyan-900/30 border border-cyan-800/20" />
             </div>
-            <div className="h-px w-32 bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent mb-4" />
-            <p className="text-cyan-300/70 text-sm sm:text-base mb-1 tracking-wide">
-              {revealPct.toFixed(1)}% territory secured
-            </p>
-            <p className="text-cyan-700/50 text-xs sm:text-sm mb-6 tracking-wide">
-              {lives} {lives === 1 ? 'life' : 'lives'} remaining
-            </p>
-            <button
-              onClick={restart}
-              className="group relative px-8 py-2.5 sm:py-3 rounded-lg text-cyan-300 uppercase tracking-[0.2em] text-xs sm:text-sm font-bold transition-all overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-cyan-500/15 border border-cyan-500/40 rounded-lg group-hover:bg-cyan-500/25 group-hover:border-cyan-400/60 transition-all" />
-              <div className="absolute inset-0 shadow-[0_0_20px_rgba(0,255,204,0.15)] group-hover:shadow-[0_0_30px_rgba(0,255,204,0.25)] transition-all rounded-lg" />
-              <span className="relative">Play Again</span>
-            </button>
+          </div>
+        ) : (
+          /* Desktop Instructions */
+          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-0.5 text-cyan-800/40 text-[10px] sm:text-xs tracking-wide">
+            <span>
+              <kbd className="px-1 py-0.5 bg-cyan-950/20 border border-cyan-900/20 rounded text-[9px] text-cyan-600/50 font-mono">
+                Arrows
+              </kbd>
+              {' / '}
+              <kbd className="px-1 py-0.5 bg-cyan-950/20 border border-cyan-900/20 rounded text-[9px] text-cyan-600/50 font-mono">
+                WASD
+              </kbd>
+            </span>
+            <span>Trail inward from border</span>
+            <span>Reach the wall to capture</span>
+            <span className="text-red-700/40">Orb on trail sends a chaser</span>
+            <span className="text-red-700/40">Direct orb hit = instant death</span>
           </div>
         )}
-
-        {/* Game Over Overlay */}
-        {phase === 'lost' && (
-          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-10 animate-fadeIn">
-            <div className="relative">
-              <div className="absolute inset-0 blur-2xl bg-red-500/15 rounded-full" />
-              <div className="relative text-4xl sm:text-5xl font-bold tracking-wider bg-gradient-to-r from-red-400 via-orange-300 to-red-500 bg-clip-text text-transparent mb-3">
-                OVERLOADED
-              </div>
-            </div>
-            <div className="h-px w-32 bg-gradient-to-r from-transparent via-red-500/30 to-transparent mb-4" />
-            <p className="text-red-300/70 text-sm sm:text-base mb-1 tracking-wide">
-              Grid breach at {revealPct.toFixed(1)}%
-            </p>
-            <p className="text-red-700/50 text-xs sm:text-sm mb-6 tracking-wide">
-              Target was {WIN_PERCENTAGE}%
-            </p>
-            <button
-              onClick={restart}
-              className="group relative px-8 py-2.5 sm:py-3 rounded-lg text-red-300 uppercase tracking-[0.2em] text-xs sm:text-sm font-bold transition-all overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-red-500/15 border border-red-500/40 rounded-lg group-hover:bg-red-500/25 group-hover:border-red-400/60 transition-all" />
-              <div className="absolute inset-0 shadow-[0_0_20px_rgba(255,80,80,0.15)] group-hover:shadow-[0_0_30px_rgba(255,80,80,0.25)] transition-all rounded-lg" />
-              <span className="relative">Try Again</span>
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Instructions */}
-      <div className="w-full max-w-[700px] mt-3 sm:mt-4 text-center">
-        <div className="flex flex-wrap items-center justify-center gap-x-4 sm:gap-x-6 gap-y-1 text-cyan-800/50 text-[10px] sm:text-xs tracking-wide">
-          <span>
-            <kbd className="px-1 sm:px-1.5 py-0.5 bg-cyan-950/30 border border-cyan-900/30 rounded text-[9px] sm:text-[10px] text-cyan-600/60 font-mono">
-              WASD
-            </kbd>
-            {' / '}
-            <kbd className="px-1 sm:px-1.5 py-0.5 bg-cyan-950/30 border border-cyan-900/30 rounded text-[9px] sm:text-[10px] text-cyan-600/60 font-mono">
-              Arrows
-            </kbd>
-            {' to move'}
-          </span>
-          <span className="hidden sm:inline">Trail inward from border</span>
-          <span>Return to wall to capture</span>
-          <span>Don&apos;t cross your trail</span>
-        </div>
       </div>
     </div>
+  );
+}
+
+// ─── D-Pad Arrow SVG ──────────────────────────────────────────────
+
+function DpadArrow({ direction }: { direction: 'up' | 'down' | 'left' | 'right' }) {
+  const rotation = {
+    up: '0',
+    right: '90',
+    down: '180',
+    left: '270',
+  }[direction];
+
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      className="w-full h-full"
+      style={{ transform: `rotate(${rotation}deg)` }}
+    >
+      <polygon
+        points="12,4 20,16 4,16"
+        fill="rgba(0, 255, 204, 0.25)"
+        stroke="rgba(0, 255, 204, 0.5)"
+        strokeWidth="1"
+      />
+    </svg>
   );
 }
