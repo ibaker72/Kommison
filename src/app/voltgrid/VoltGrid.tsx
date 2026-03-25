@@ -10,6 +10,7 @@ import { render, resetBackgroundCache } from './render';
 
 export default function VoltGrid() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef<GameState>(createInitialState());
   const inputRef = useRef<InputState>({ up: false, down: false, left: false, right: false });
   const animFrameRef = useRef<number>(0);
@@ -62,15 +63,17 @@ export default function VoltGrid() {
     }
   }, []);
 
-  // ─── Touch Input (virtual joystick, no visible controls) ───
+  // ─── Touch Input (virtual joystick on entire game surface) ──
   const handleTouchStart = useCallback((e: TouchEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     const touch = e.touches[0];
     touchOriginRef.current = { x: touch.clientX, y: touch.clientY };
   }, []);
 
   const handleTouchMove = useCallback((e: TouchEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     if (!touchOriginRef.current || e.touches.length === 0) return;
     const touch = e.touches[0];
     const dx = touch.clientX - touchOriginRef.current.x;
@@ -98,6 +101,7 @@ export default function VoltGrid() {
 
   const handleTouchEnd = useCallback((e: TouchEvent) => {
     e.preventDefault();
+    e.stopPropagation();
     touchOriginRef.current = null;
     const input = inputRef.current;
     input.up = false;
@@ -118,23 +122,17 @@ export default function VoltGrid() {
   }, []);
 
   // ─── Canvas Resize ──────────────────────────────────────────
+  // Canvas fills the entire wrapper. The render function handles
+  // scaling and centering the arena within the canvas.
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const container = canvas.parentElement;
     if (!container) return;
 
-    const maxW = container.clientWidth;
-    const maxH = container.clientHeight;
-    const ratio = ARENA_WIDTH / ARENA_HEIGHT;
-
-    let w = maxW;
-    let h = w / ratio;
-
-    if (h > maxH) {
-      h = maxH;
-      w = h * ratio;
-    }
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    if (w === 0 || h === 0) return;
 
     const dpr = window.devicePixelRatio || 1;
     canvas.width = w * dpr;
@@ -145,18 +143,21 @@ export default function VoltGrid() {
 
   // ─── Game Loop + Event Binding ─────────────────────────────
   useEffect(() => {
+    const wrapper = wrapperRef.current;
     const canvas = canvasRef.current;
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     window.addEventListener('resize', resizeCanvas);
 
-    // Touch events on canvas
-    if (canvas) {
-      canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-      canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-      canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
-      canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+    // Touch events on the ENTIRE game wrapper (not just canvas)
+    // This ensures touching anywhere on the screen controls the game
+    // and prevents page scroll/overscroll/pull-to-refresh.
+    if (wrapper) {
+      wrapper.addEventListener('touchstart', handleTouchStart, { passive: false });
+      wrapper.addEventListener('touchmove', handleTouchMove, { passive: false });
+      wrapper.addEventListener('touchend', handleTouchEnd, { passive: false });
+      wrapper.addEventListener('touchcancel', handleTouchEnd, { passive: false });
     }
 
     resizeCanvas();
@@ -186,11 +187,11 @@ export default function VoltGrid() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('resize', resizeCanvas);
-      if (canvas) {
-        canvas.removeEventListener('touchstart', handleTouchStart);
-        canvas.removeEventListener('touchmove', handleTouchMove);
-        canvas.removeEventListener('touchend', handleTouchEnd);
-        canvas.removeEventListener('touchcancel', handleTouchEnd);
+      if (wrapper) {
+        wrapper.removeEventListener('touchstart', handleTouchStart);
+        wrapper.removeEventListener('touchmove', handleTouchMove);
+        wrapper.removeEventListener('touchend', handleTouchEnd);
+        wrapper.removeEventListener('touchcancel', handleTouchEnd);
       }
       cancelAnimationFrame(animFrameRef.current);
     };
@@ -198,9 +199,13 @@ export default function VoltGrid() {
 
   // ─── Render ─────────────────────────────────────────────────
   return (
-    <div className="h-dvh bg-[#050510] text-white flex flex-col overflow-hidden select-none">
+    <div
+      ref={wrapperRef}
+      className="fixed inset-0 bg-[#050510] text-white flex flex-col overflow-hidden select-none"
+      style={{ touchAction: 'none', overscrollBehavior: 'none' }}
+    >
 
-      {/* ── Slim Top HUD (overlay-style) ──────────────────────── */}
+      {/* ── Slim Top HUD ──────────────────────────────────────── */}
       <div className="shrink-0 px-3 sm:px-5 py-1.5 sm:py-2 z-10">
         <div className="flex items-center justify-between gap-3">
           {/* Title + percentage */}
@@ -255,68 +260,67 @@ export default function VoltGrid() {
       </div>
 
       {/* ── Canvas Area (fills all remaining space) ───────────── */}
-      <div className="flex-1 min-h-0 relative flex items-center justify-center">
-        <div className="relative w-full h-full flex items-center justify-center">
-          <canvas
-            ref={canvasRef}
-            className="block touch-none"
-            tabIndex={0}
-          />
+      <div className="flex-1 min-h-0 min-w-0 relative">
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full block"
+          style={{ touchAction: 'none' }}
+          tabIndex={0}
+        />
 
-          {/* Win Overlay */}
-          {phase === 'won' && (
-            <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-20 animate-fadeIn">
-              <div className="relative">
-                <div className="absolute inset-0 blur-2xl bg-cyan-500/20 rounded-full" />
-                <div className="relative text-3xl sm:text-5xl font-bold tracking-wider bg-gradient-to-r from-cyan-300 via-teal-200 to-cyan-400 bg-clip-text text-transparent mb-3">
-                  GRID CAPTURED
-                </div>
+        {/* Win Overlay */}
+        {phase === 'won' && (
+          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-20 animate-fadeIn">
+            <div className="relative">
+              <div className="absolute inset-0 blur-2xl bg-cyan-500/20 rounded-full" />
+              <div className="relative text-3xl sm:text-5xl font-bold tracking-wider bg-gradient-to-r from-cyan-300 via-teal-200 to-cyan-400 bg-clip-text text-transparent mb-3">
+                GRID CAPTURED
               </div>
-              <div className="h-px w-24 sm:w-32 bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent mb-3 sm:mb-4" />
-              <p className="text-cyan-300/70 text-xs sm:text-base mb-1 tracking-wide">
-                {revealPct.toFixed(1)}% territory secured
-              </p>
-              <p className="text-cyan-700/50 text-[10px] sm:text-sm mb-5 sm:mb-6 tracking-wide">
-                {lives} {lives === 1 ? 'life' : 'lives'} remaining
-              </p>
-              <button
-                onClick={restart}
-                className="group relative px-6 sm:px-8 py-2 sm:py-3 rounded-lg text-cyan-300 uppercase tracking-[0.2em] text-[10px] sm:text-sm font-bold transition-all overflow-hidden"
-              >
-                <div className="absolute inset-0 bg-cyan-500/15 border border-cyan-500/40 rounded-lg group-hover:bg-cyan-500/25 group-hover:border-cyan-400/60 transition-all" />
-                <div className="absolute inset-0 shadow-[0_0_20px_rgba(0,255,204,0.15)] group-hover:shadow-[0_0_30px_rgba(0,255,204,0.25)] transition-all rounded-lg" />
-                <span className="relative">Play Again</span>
-              </button>
             </div>
-          )}
+            <div className="h-px w-24 sm:w-32 bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent mb-3 sm:mb-4" />
+            <p className="text-cyan-300/70 text-xs sm:text-base mb-1 tracking-wide">
+              {revealPct.toFixed(1)}% territory secured
+            </p>
+            <p className="text-cyan-700/50 text-[10px] sm:text-sm mb-5 sm:mb-6 tracking-wide">
+              {lives} {lives === 1 ? 'life' : 'lives'} remaining
+            </p>
+            <button
+              onClick={restart}
+              className="group relative px-6 sm:px-8 py-2 sm:py-3 rounded-lg text-cyan-300 uppercase tracking-[0.2em] text-[10px] sm:text-sm font-bold transition-all overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-cyan-500/15 border border-cyan-500/40 rounded-lg group-hover:bg-cyan-500/25 group-hover:border-cyan-400/60 transition-all" />
+              <div className="absolute inset-0 shadow-[0_0_20px_rgba(0,255,204,0.15)] group-hover:shadow-[0_0_30px_rgba(0,255,204,0.25)] transition-all rounded-lg" />
+              <span className="relative">Play Again</span>
+            </button>
+          </div>
+        )}
 
-          {/* Game Over Overlay */}
-          {phase === 'lost' && (
-            <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-20 animate-fadeIn">
-              <div className="relative">
-                <div className="absolute inset-0 blur-2xl bg-red-500/15 rounded-full" />
-                <div className="relative text-3xl sm:text-5xl font-bold tracking-wider bg-gradient-to-r from-red-400 via-orange-300 to-red-500 bg-clip-text text-transparent mb-3">
-                  OVERLOADED
-                </div>
+        {/* Game Over Overlay */}
+        {phase === 'lost' && (
+          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-20 animate-fadeIn">
+            <div className="relative">
+              <div className="absolute inset-0 blur-2xl bg-red-500/15 rounded-full" />
+              <div className="relative text-3xl sm:text-5xl font-bold tracking-wider bg-gradient-to-r from-red-400 via-orange-300 to-red-500 bg-clip-text text-transparent mb-3">
+                OVERLOADED
               </div>
-              <div className="h-px w-24 sm:w-32 bg-gradient-to-r from-transparent via-red-500/30 to-transparent mb-3 sm:mb-4" />
-              <p className="text-red-300/70 text-xs sm:text-base mb-1 tracking-wide">
-                Grid breach at {revealPct.toFixed(1)}%
-              </p>
-              <p className="text-red-700/50 text-[10px] sm:text-sm mb-5 sm:mb-6 tracking-wide">
-                Target was {WIN_PERCENTAGE}%
-              </p>
-              <button
-                onClick={restart}
-                className="group relative px-6 sm:px-8 py-2 sm:py-3 rounded-lg text-red-300 uppercase tracking-[0.2em] text-[10px] sm:text-sm font-bold transition-all overflow-hidden"
-              >
-                <div className="absolute inset-0 bg-red-500/15 border border-red-500/40 rounded-lg group-hover:bg-red-500/25 group-hover:border-red-400/60 transition-all" />
-                <div className="absolute inset-0 shadow-[0_0_20px_rgba(255,80,80,0.15)] group-hover:shadow-[0_0_30px_rgba(255,80,80,0.25)] transition-all rounded-lg" />
-                <span className="relative">Try Again</span>
-              </button>
             </div>
-          )}
-        </div>
+            <div className="h-px w-24 sm:w-32 bg-gradient-to-r from-transparent via-red-500/30 to-transparent mb-3 sm:mb-4" />
+            <p className="text-red-300/70 text-xs sm:text-base mb-1 tracking-wide">
+              Grid breach at {revealPct.toFixed(1)}%
+            </p>
+            <p className="text-red-700/50 text-[10px] sm:text-sm mb-5 sm:mb-6 tracking-wide">
+              Target was {WIN_PERCENTAGE}%
+            </p>
+            <button
+              onClick={restart}
+              className="group relative px-6 sm:px-8 py-2 sm:py-3 rounded-lg text-red-300 uppercase tracking-[0.2em] text-[10px] sm:text-sm font-bold transition-all overflow-hidden"
+            >
+              <div className="absolute inset-0 bg-red-500/15 border border-red-500/40 rounded-lg group-hover:bg-red-500/25 group-hover:border-red-400/60 transition-all" />
+              <div className="absolute inset-0 shadow-[0_0_20px_rgba(255,80,80,0.15)] group-hover:shadow-[0_0_30px_rgba(255,80,80,0.25)] transition-all rounded-lg" />
+              <span className="relative">Try Again</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Bottom: compact desktop hint only ────────────────── */}
