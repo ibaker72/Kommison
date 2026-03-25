@@ -41,6 +41,7 @@ export default function VoltGrid() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
     const dpr = window.devicePixelRatio || 1;
     canvas.width = Math.floor(rect.width * dpr);
     canvas.height = Math.floor(rect.height * dpr);
@@ -91,6 +92,8 @@ export default function VoltGrid() {
     window.addEventListener('keydown', onKeyDown, { passive: false });
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('resize', resize);
+    window.visualViewport?.addEventListener('resize', resize);
+    window.visualViewport?.addEventListener('scroll', resize);
     resize();
 
     const loop = (now: number): void => {
@@ -117,6 +120,8 @@ export default function VoltGrid() {
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('resize', resize);
+      window.visualViewport?.removeEventListener('resize', resize);
+      window.visualViewport?.removeEventListener('scroll', resize);
       cancelAnimationFrame(frameRef.current);
     };
   }, [resize, start, syncHud]);
@@ -151,9 +156,9 @@ export default function VoltGrid() {
   };
 
   return (
-    <div className="fixed inset-0 bg-[#03040d] text-cyan-100 overflow-hidden select-none" style={{ touchAction: 'none', overscrollBehavior: 'none' }}>
+    <div className="voltgrid-shell bg-[#03040d] text-cyan-100 overflow-hidden select-none" style={{ touchAction: 'none', overscrollBehavior: 'none' }}>
       <div className="absolute inset-0 flex flex-col">
-        <header className="h-14 md:h-16 px-4 md:px-6 flex items-center justify-between border-b border-cyan-400/15 bg-black/35 backdrop-blur-md z-20">
+        <header className="h-12 md:h-14 px-3 md:px-6 flex items-center justify-between border-b border-cyan-400/15 bg-black/35 backdrop-blur-md z-20 voltgrid-safe-top">
           <div className="flex items-center gap-3">
             <h1 className="text-sm md:text-base font-semibold tracking-[0.32em] text-cyan-300">VOLTGRID</h1>
             <span className="text-xs md:text-sm text-cyan-200/70">{revealPct.toFixed(1)}%</span>
@@ -246,7 +251,7 @@ export default function VoltGrid() {
             </div>
           )}
 
-          <div className="absolute bottom-0 left-0 right-0 z-20 px-4 py-2 text-[11px] md:text-xs text-cyan-300/65 bg-gradient-to-t from-black/70 to-transparent">
+          <div className="absolute bottom-0 left-0 right-0 z-20 px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] text-[11px] md:text-xs text-cyan-300/65 bg-gradient-to-t from-black/70 to-transparent">
             {statusText}
           </div>
         </main>

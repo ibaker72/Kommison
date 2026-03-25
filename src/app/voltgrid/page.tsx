@@ -15,5 +15,9 @@ export const viewport: Viewport = {
 };
 
 export default function VoltGridPage() {
-  return <VoltGrid />;
+  return (
+    <main className="voltgrid-route">
+      <VoltGrid />
+    </main>
+  );
 }

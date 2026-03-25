@@ -5,10 +5,15 @@ export interface Vec2 {
   y: number;
 }
 
+export type ArenaEdge = 'top' | 'right' | 'bottom' | 'left';
+export type PlayerMotionState = 'border-attached' | 'trail-active' | 'respawning' | 'capture-resolve';
+
 export interface Player {
   pos: Vec2;
   vel: Vec2;
   onBorder: boolean;
+  attachedEdge: ArenaEdge;
+  motionState: PlayerMotionState;
   trail: Vec2[];
   lives: number;
   invulnMs: number;

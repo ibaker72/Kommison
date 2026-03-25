@@ -1,20 +1,41 @@
 import {
   ARENA_HEIGHT,
   ARENA_WIDTH,
+  BORDER_LINE,
+  BORDER_REATTACH_EPSILON,
   BORDER_THICKNESS,
   GRID_CELL_SIZE,
   GRID_COLS,
   GRID_ROWS,
   TRAIL_HIT_WIDTH,
 } from './constants';
-import type { Orb, Vec2 } from './types';
+import type { ArenaEdge, Orb, Vec2 } from './types';
 import { cellIndex, pointToSegmentDistance, worldToCell } from './utils';
 
 export const isOnBorder = (p: Vec2): boolean =>
-  p.x <= BORDER_THICKNESS ||
-  p.x >= ARENA_WIDTH - BORDER_THICKNESS ||
-  p.y <= BORDER_THICKNESS ||
-  p.y >= ARENA_HEIGHT - BORDER_THICKNESS;
+  p.x <= BORDER_LINE + BORDER_REATTACH_EPSILON ||
+  p.x >= ARENA_WIDTH - BORDER_LINE - BORDER_REATTACH_EPSILON ||
+  p.y <= BORDER_LINE + BORDER_REATTACH_EPSILON ||
+  p.y >= ARENA_HEIGHT - BORDER_LINE - BORDER_REATTACH_EPSILON;
+
+export const detectBorderEdge = (p: Vec2): ArenaEdge => {
+  const distances: Record<ArenaEdge, number> = {
+    top: Math.abs(p.y - BORDER_LINE),
+    right: Math.abs(p.x - (ARENA_WIDTH - BORDER_LINE)),
+    bottom: Math.abs(p.y - (ARENA_HEIGHT - BORDER_LINE)),
+    left: Math.abs(p.x - BORDER_LINE),
+  };
+
+  let best: ArenaEdge = 'top';
+  let min = distances.top;
+  (['right', 'bottom', 'left'] as ArenaEdge[]).forEach((edge) => {
+    if (distances[edge] < min) {
+      best = edge;
+      min = distances[edge];
+    }
+  });
+  return best;
+};
 
 export const snapToBorder = (p: Vec2): Vec2 => {
   const left = p.x;
@@ -22,10 +43,10 @@ export const snapToBorder = (p: Vec2): Vec2 => {
   const top = p.y;
   const bottom = ARENA_HEIGHT - p.y;
   const min = Math.min(left, right, top, bottom);
-  if (min === top) return { x: p.x, y: BORDER_THICKNESS / 2 };
-  if (min === bottom) return { x: p.x, y: ARENA_HEIGHT - BORDER_THICKNESS / 2 };
-  if (min === left) return { x: BORDER_THICKNESS / 2, y: p.y };
-  return { x: ARENA_WIDTH - BORDER_THICKNESS / 2, y: p.y };
+  if (min === top) return { x: p.x, y: BORDER_LINE };
+  if (min === bottom) return { x: p.x, y: ARENA_HEIGHT - BORDER_LINE };
+  if (min === left) return { x: BORDER_LINE, y: p.y };
+  return { x: ARENA_WIDTH - BORDER_LINE, y: p.y };
 };
 
 export const orbHitsTrail = (orb: Orb, trail: Vec2[]): number => {

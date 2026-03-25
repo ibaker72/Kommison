@@ -1,6 +1,9 @@
 export const ARENA_WIDTH = 960;
 export const ARENA_HEIGHT = 540;
 export const BORDER_THICKNESS = 8;
+export const BORDER_LINE = BORDER_THICKNESS / 2;
+export const BORDER_REATTACH_EPSILON = 0.75;
+export const DETACH_PUSH_DISTANCE = 2.5;
 
 export const GRID_CELL_SIZE = 6;
 export const GRID_COLS = Math.floor(ARENA_WIDTH / GRID_CELL_SIZE);
