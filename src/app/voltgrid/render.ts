@@ -6,6 +6,7 @@ import {
   PLAYER_SIZE,
   PLAYER_COLOR,
   PLAYER_GLOW_COLOR,
+  PLAYER_EMOJI,
   TRAIL_COLOR,
   TRAIL_GLOW_COLOR,
   TRAIL_INFECTED_COLOR,
@@ -69,7 +70,7 @@ function getBackgroundImage(): OffscreenCanvas {
   }
 
   ctx.fillStyle = 'rgba(0, 255, 204, 0.25)';
-  for (let i = 0; i < 40; i++) {
+  for (let i = 0; i < 50; i++) {
     const nx = bw + 20 + Math.random() * (ARENA_WIDTH - 2 * bw - 40);
     const ny = bw + 20 + Math.random() * (ARENA_HEIGHT - 2 * bw - 40);
     const r = 1 + Math.random() * 2;
@@ -78,7 +79,7 @@ function getBackgroundImage(): OffscreenCanvas {
     ctx.fill();
   }
 
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 10; i++) {
     const sx = bw + 40 + Math.random() * (ARENA_WIDTH - 2 * bw - 80);
     const sy = bw + 40 + Math.random() * (ARENA_HEIGHT - 2 * bw - 80);
     const sg = ctx.createRadialGradient(sx, sy, 0, sx, sy, 30 + Math.random() * 30);
@@ -91,7 +92,7 @@ function getBackgroundImage(): OffscreenCanvas {
 
   ctx.strokeStyle = 'rgba(255, 0, 255, 0.06)';
   ctx.lineWidth = 1.5;
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 14; i++) {
     const sx = Math.random() * ARENA_WIDTH;
     const sy = Math.random() * ARENA_HEIGHT;
     const angle = Math.random() * Math.PI;
@@ -420,88 +421,54 @@ function drawOrb(
   ctx.restore();
 }
 
+// ─── Emoji Player Renderer ──────────────────────────────────────
+
 function drawPlayer(
   ctx: CanvasRenderingContext2D,
   player: Player,
   time: number
 ): void {
-  const { x, y, invulnFrames, direction } = player;
-  const pulse = 0.7 + 0.3 * Math.sin(time * 0.004);
+  const { x, y, invulnFrames } = player;
   const size = PLAYER_SIZE;
+  const pulse = 0.7 + 0.3 * Math.sin(time * 0.004);
 
+  // Invulnerability blink
   if (invulnFrames > 0 && Math.floor(time / 80) % 2 === 0) {
     return;
   }
 
   ctx.save();
 
-  // Determine rotation from movement direction
-  let angle = -Math.PI / 2; // default: pointing up
-  if (direction.dx !== 0 || direction.dy !== 0) {
-    angle = Math.atan2(direction.dy, direction.dx);
-  }
-
-  ctx.translate(x, y);
-  ctx.rotate(angle);
-
   // Outer glow halo
-  const glowGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 1.2);
-  glowGrad.addColorStop(0, 'rgba(0, 255, 204, 0.25)');
-  glowGrad.addColorStop(0.5, 'rgba(0, 255, 204, 0.08)');
+  const glowGrad = ctx.createRadialGradient(x, y, 0, x, y, size * 1.1);
+  glowGrad.addColorStop(0, 'rgba(0, 255, 204, 0.3)');
+  glowGrad.addColorStop(0.5, 'rgba(0, 255, 204, 0.1)');
   glowGrad.addColorStop(1, 'rgba(0, 255, 204, 0)');
   ctx.fillStyle = glowGrad;
   ctx.beginPath();
-  ctx.arc(0, 0, size * 1.2, 0, Math.PI * 2);
+  ctx.arc(x, y, size * 1.1, 0, Math.PI * 2);
   ctx.fill();
 
-  // Main ship body — triangular with notched tail
+  // Cyan ring behind emoji
   ctx.shadowColor = PLAYER_GLOW_COLOR;
-  ctx.shadowBlur = 18 * pulse;
-
-  const nose = size * 0.6;
-  const wing = size * 0.45;
-  const tail = size * 0.4;
-  const notch = size * 0.15;
-
-  ctx.fillStyle = PLAYER_COLOR;
+  ctx.shadowBlur = 16 * pulse;
+  ctx.strokeStyle = PLAYER_COLOR;
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(nose, 0);                     // nose tip
-  ctx.lineTo(-tail, -wing);                // left wing
-  ctx.lineTo(-tail + notch, 0);            // tail notch
-  ctx.lineTo(-tail, wing);                 // right wing
-  ctx.closePath();
-  ctx.fill();
+  ctx.arc(x, y, size * 0.55, 0, Math.PI * 2);
+  ctx.stroke();
 
-  // Inner highlight layer
-  ctx.fillStyle = 'rgba(180, 255, 240, 0.4)';
-  ctx.beginPath();
-  ctx.moveTo(nose * 0.6, 0);
-  ctx.lineTo(-tail * 0.4, -wing * 0.4);
-  ctx.lineTo(-tail * 0.3, 0);
-  ctx.lineTo(-tail * 0.4, wing * 0.4);
-  ctx.closePath();
-  ctx.fill();
-
-  // Bright core dot
-  ctx.shadowBlur = 10;
-  ctx.shadowColor = '#ffffff';
-  ctx.fillStyle = '#ffffff';
-  ctx.beginPath();
-  ctx.arc(0, 0, 2.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  // Engine glow at tail
-  const enginePulse = 0.5 + 0.5 * Math.sin(time * 0.015);
-  ctx.shadowColor = 'rgba(0, 200, 255, 0.8)';
-  ctx.shadowBlur = 8 * enginePulse;
-  ctx.fillStyle = `rgba(0, 220, 255, ${0.4 + 0.3 * enginePulse})`;
-  ctx.beginPath();
-  ctx.arc(-tail + notch, 0, 2.5 + enginePulse, 0, Math.PI * 2);
-  ctx.fill();
+  // Emoji rendering
+  ctx.shadowColor = 'rgba(255, 255, 100, 0.8)';
+  ctx.shadowBlur = 12 * pulse;
+  ctx.font = `${size}px serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(PLAYER_EMOJI, x, y + 1);
 
   ctx.restore();
 
-  // Trail-active ring (drawn in world space, not rotated)
+  // Trail-active ring (pulsing magenta ring when trailing)
   if (player.trail.length > 0) {
     ctx.save();
     ctx.strokeStyle = 'rgba(255, 0, 255, 0.5)';
@@ -509,7 +476,7 @@ function drawPlayer(
     ctx.shadowColor = 'rgba(255, 0, 255, 0.4)';
     ctx.shadowBlur = 6;
     ctx.beginPath();
-    ctx.arc(x, y, size * 0.7 + Math.sin(time * 0.01) * 2, 0, Math.PI * 2);
+    ctx.arc(x, y, size * 0.75 + Math.sin(time * 0.01) * 2, 0, Math.PI * 2);
     ctx.stroke();
     ctx.restore();
   }

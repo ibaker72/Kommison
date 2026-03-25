@@ -1,14 +1,17 @@
 // ─── Game Constants ───────────────────────────────────────────────
-export const ARENA_WIDTH = 600;
-export const ARENA_HEIGHT = 480;
+
+// 16:9 arena for widescreen/immersive feel
+export const ARENA_WIDTH = 800;
+export const ARENA_HEIGHT = 450;
 export const BORDER_WIDTH = 4;
 
-export const PLAYER_SIZE = 18;
-export const PLAYER_SPEED_BORDER = 4;
-export const PLAYER_SPEED_TRAIL = 3;
+export const PLAYER_SIZE = 24;
+export const PLAYER_SPEED_BORDER = 5;
+export const PLAYER_SPEED_TRAIL = 3.5;
 export const PLAYER_COLOR = '#00ffcc';
 export const PLAYER_GLOW_COLOR = 'rgba(0, 255, 204, 0.8)';
-export const PLAYER_HIT_RADIUS = 6;
+export const PLAYER_HIT_RADIUS = 8;
+export const PLAYER_EMOJI = '⚡';
 
 export const TRAIL_COLOR = '#ff00ff';
 export const TRAIL_GLOW_COLOR = 'rgba(255, 0, 255, 0.6)';
@@ -16,13 +19,13 @@ export const TRAIL_INFECTED_COLOR = '#ff3333';
 export const TRAIL_INFECTED_GLOW = 'rgba(255, 50, 50, 0.7)';
 export const TRAIL_WIDTH = 3;
 
-export const ORB_RADIUS = 7;
-export const ORB_BASE_SPEED = 2.2;
+export const ORB_RADIUS = 8;
+export const ORB_BASE_SPEED = 2.5;
 export const ORB_COLOR = '#ffcc00';
 export const ORB_GLOW_COLOR = 'rgba(255, 204, 0, 0.8)';
 
-export const CHASER_SPEED = 4.5;
-export const CHASER_RADIUS = 5;
+export const CHASER_SPEED = 5;
+export const CHASER_RADIUS = 6;
 export const CHASER_COLOR = '#ff4444';
 export const CHASER_GLOW = 'rgba(255, 68, 68, 0.9)';
 

@@ -13,6 +13,7 @@ export default function VoltGrid() {
   const stateRef = useRef<GameState>(createInitialState());
   const inputRef = useRef<InputState>({ up: false, down: false, left: false, right: false });
   const animFrameRef = useRef<number>(0);
+  const touchOriginRef = useRef<{ x: number; y: number } | null>(null);
 
   const [revealPct, setRevealPct] = useState(0);
   const [lives, setLives] = useState(INITIAL_LIVES);
@@ -21,26 +22,22 @@ export default function VoltGrid() {
   const [hasChaser, setHasChaser] = useState(false);
 
   // ─── Detect Touch ──────────────────────────────────────────
-  // Only show touch controls on actual touch-primary devices (phones/tablets).
-  // Laptops with touchscreens still get keyboard controls.
-
   useEffect(() => {
     const isCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
     const isSmallScreen = window.innerWidth <= 1024;
-    // Only default to touch mode if primary pointer is coarse AND screen is small
     if (isCoarsePointer && isSmallScreen) {
       setIsTouchDevice(true);
     }
-    // Fallback: if user actually touches, enable touch controls
-    window.addEventListener('touchstart', () => {
+    const onFirstTouch = () => {
       if (window.matchMedia('(pointer: coarse)').matches) {
         setIsTouchDevice(true);
       }
-    }, { once: true });
+    };
+    window.addEventListener('touchstart', onFirstTouch, { once: true });
+    return () => window.removeEventListener('touchstart', onFirstTouch);
   }, []);
 
   // ─── Keyboard Input ────────────────────────────────────────
-
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     const input = inputRef.current;
     switch (e.key) {
@@ -65,28 +62,51 @@ export default function VoltGrid() {
     }
   }, []);
 
-  // ─── Touch D-Pad ───────────────────────────────────────────
-
-  const setTouchDir = useCallback((dir: 'up' | 'down' | 'left' | 'right' | 'none') => {
-    const input = inputRef.current;
-    input.up = dir === 'up';
-    input.down = dir === 'down';
-    input.left = dir === 'left';
-    input.right = dir === 'right';
+  // ─── Touch Input (virtual joystick, no visible controls) ───
+  const handleTouchStart = useCallback((e: TouchEvent) => {
+    e.preventDefault();
+    const touch = e.touches[0];
+    touchOriginRef.current = { x: touch.clientX, y: touch.clientY };
   }, []);
 
-  const handleDpadTouch = useCallback((dir: 'up' | 'down' | 'left' | 'right') => (e: React.TouchEvent) => {
+  const handleTouchMove = useCallback((e: TouchEvent) => {
     e.preventDefault();
-    setTouchDir(dir);
-  }, [setTouchDir]);
+    if (!touchOriginRef.current || e.touches.length === 0) return;
+    const touch = e.touches[0];
+    const dx = touch.clientX - touchOriginRef.current.x;
+    const dy = touch.clientY - touchOriginRef.current.y;
 
-  const handleDpadRelease = useCallback((e: React.TouchEvent) => {
+    const deadZone = 8;
+    const input = inputRef.current;
+
+    if (Math.abs(dx) < deadZone && Math.abs(dy) < deadZone) {
+      return; // Stay in dead zone, keep current direction
+    }
+
+    if (Math.abs(dx) > Math.abs(dy)) {
+      input.left = dx < 0;
+      input.right = dx > 0;
+      input.up = false;
+      input.down = false;
+    } else {
+      input.up = dy < 0;
+      input.down = dy > 0;
+      input.left = false;
+      input.right = false;
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback((e: TouchEvent) => {
     e.preventDefault();
-    setTouchDir('none');
-  }, [setTouchDir]);
+    touchOriginRef.current = null;
+    const input = inputRef.current;
+    input.up = false;
+    input.down = false;
+    input.left = false;
+    input.right = false;
+  }, []);
 
   // ─── Restart ─────────────────────────────────────────────────
-
   const restart = useCallback(() => {
     resetBackgroundCache();
     stateRef.current = createInitialState();
@@ -98,7 +118,6 @@ export default function VoltGrid() {
   }, []);
 
   // ─── Canvas Resize ──────────────────────────────────────────
-
   const resizeCanvas = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -124,12 +143,22 @@ export default function VoltGrid() {
     canvas.style.height = `${h}px`;
   }, []);
 
-  // ─── Game Loop ──────────────────────────────────────────────
-
+  // ─── Game Loop + Event Binding ─────────────────────────────
   useEffect(() => {
+    const canvas = canvasRef.current;
+
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
     window.addEventListener('resize', resizeCanvas);
+
+    // Touch events on canvas
+    if (canvas) {
+      canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+      canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+      canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+      canvas.addEventListener('touchcancel', handleTouchEnd, { passive: false });
+    }
+
     resizeCanvas();
 
     const loop = (time: number) => {
@@ -141,7 +170,6 @@ export default function VoltGrid() {
       setPhase(s.phase);
       setHasChaser(s.trailChaser !== null && s.trailChaser.active);
 
-      const canvas = canvasRef.current;
       if (canvas) {
         const ctx = canvas.getContext('2d');
         if (ctx) {
@@ -158,66 +186,67 @@ export default function VoltGrid() {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
       window.removeEventListener('resize', resizeCanvas);
+      if (canvas) {
+        canvas.removeEventListener('touchstart', handleTouchStart);
+        canvas.removeEventListener('touchmove', handleTouchMove);
+        canvas.removeEventListener('touchend', handleTouchEnd);
+        canvas.removeEventListener('touchcancel', handleTouchEnd);
+      }
       cancelAnimationFrame(animFrameRef.current);
     };
-  }, [handleKeyDown, handleKeyUp, resizeCanvas]);
+  }, [handleKeyDown, handleKeyUp, handleTouchStart, handleTouchMove, handleTouchEnd, resizeCanvas]);
 
   // ─── Render ─────────────────────────────────────────────────
-
   return (
     <div className="h-dvh bg-[#050510] text-white flex flex-col overflow-hidden select-none">
 
-      {/* ── Top HUD ─────────────────────────────────────────── */}
-      <div className="shrink-0 px-3 sm:px-6 pt-1 pb-0.5 sm:pt-2 sm:pb-1">
-        {/* Title row */}
-        <div className="flex items-center justify-between mb-1.5 sm:mb-2">
-          <div>
-            <h1 className="text-lg sm:text-2xl font-bold tracking-[0.2em] bg-gradient-to-r from-cyan-400 via-teal-300 to-cyan-500 bg-clip-text text-transparent leading-tight">
+      {/* ── Slim Top HUD (overlay-style) ──────────────────────── */}
+      <div className="shrink-0 px-3 sm:px-5 py-1.5 sm:py-2 z-10">
+        <div className="flex items-center justify-between gap-3">
+          {/* Title + percentage */}
+          <div className="flex items-center gap-3 sm:gap-4">
+            <h1 className="text-sm sm:text-lg font-bold tracking-[0.2em] bg-gradient-to-r from-cyan-400 via-teal-300 to-cyan-500 bg-clip-text text-transparent leading-tight">
               VOLTGRID
             </h1>
+            <span className="text-cyan-300 font-bold text-sm sm:text-base tabular-nums font-mono">
+              {revealPct.toFixed(1)}%
+            </span>
           </div>
-          <div className="flex items-center gap-3 sm:gap-4">
-            <div className="flex items-center gap-1.5">
-              <span className="text-cyan-600/50 text-[9px] sm:text-[10px] uppercase tracking-wider">Lives</span>
-              <div className="flex gap-1">
-                {Array.from({ length: INITIAL_LIVES }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full transition-all duration-300 ${
-                      i < lives
-                        ? 'bg-cyan-400 shadow-[0_0_6px_rgba(0,255,204,0.6)]'
-                        : 'bg-cyan-900/30'
-                    }`}
-                  />
-                ))}
-              </div>
+
+          {/* Progress bar */}
+          <div className="flex-1 max-w-[200px] sm:max-w-xs h-1 sm:h-1.5 bg-cyan-950/30 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-gradient-to-r from-cyan-500 to-teal-400 rounded-full transition-all duration-200 shadow-[0_0_8px_rgba(0,255,204,0.4)]"
+              style={{ width: `${Math.min(100, (revealPct / WIN_PERCENTAGE) * 100)}%` }}
+            />
+          </div>
+
+          {/* Lives + restart */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex gap-1">
+              {Array.from({ length: INITIAL_LIVES }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full transition-all duration-300 ${
+                    i < lives
+                      ? 'bg-cyan-400 shadow-[0_0_6px_rgba(0,255,204,0.6)]'
+                      : 'bg-cyan-900/30'
+                  }`}
+                />
+              ))}
             </div>
             <button
               onClick={restart}
-              className="text-[9px] sm:text-[10px] px-2 sm:px-2.5 py-0.5 border border-cyan-800/30 rounded text-cyan-600/60 hover:text-cyan-300 hover:border-cyan-500/50 transition-colors uppercase tracking-wider"
+              className="text-[9px] sm:text-[10px] px-2 py-0.5 border border-cyan-800/30 rounded text-cyan-600/60 hover:text-cyan-300 hover:border-cyan-500/50 transition-colors uppercase tracking-wider"
             >
               Restart
             </button>
           </div>
         </div>
 
-        {/* Stats + progress */}
-        <div className="flex items-center gap-3 mb-1">
-          <span className="text-cyan-300 font-bold text-sm sm:text-base tabular-nums font-mono">
-            {revealPct.toFixed(1)}%
-          </span>
-          <div className="flex-1 h-1 sm:h-1.5 bg-cyan-950/30 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-cyan-500 to-teal-400 rounded-full transition-all duration-200 shadow-[0_0_8px_rgba(0,255,204,0.4)]"
-              style={{ width: `${Math.min(100, (revealPct / WIN_PERCENTAGE) * 100)}%` }}
-            />
-          </div>
-          <span className="text-cyan-700/50 text-[10px] sm:text-xs font-mono">{WIN_PERCENTAGE}%</span>
-        </div>
-
         {/* Chaser warning */}
         {hasChaser && (
-          <div className="text-center">
+          <div className="text-center mt-0.5">
             <span className="text-red-400/90 text-[10px] sm:text-xs tracking-wider uppercase animate-pulse font-bold">
               Trail breached — reach the wall!
             </span>
@@ -225,18 +254,18 @@ export default function VoltGrid() {
         )}
       </div>
 
-      {/* ── Canvas Area (fills remaining space) ─────────────── */}
-      <div className="flex-1 min-h-0 relative flex items-center justify-center px-1">
+      {/* ── Canvas Area (fills all remaining space) ───────────── */}
+      <div className="flex-1 min-h-0 relative flex items-center justify-center">
         <div className="relative w-full h-full flex items-center justify-center">
           <canvas
             ref={canvasRef}
-            className="block rounded-sm"
+            className="block touch-none"
             tabIndex={0}
           />
 
           {/* Win Overlay */}
           {phase === 'won' && (
-            <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-20 animate-fadeIn rounded-sm">
+            <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-20 animate-fadeIn">
               <div className="relative">
                 <div className="absolute inset-0 blur-2xl bg-cyan-500/20 rounded-full" />
                 <div className="relative text-3xl sm:text-5xl font-bold tracking-wider bg-gradient-to-r from-cyan-300 via-teal-200 to-cyan-400 bg-clip-text text-transparent mb-3">
@@ -263,7 +292,7 @@ export default function VoltGrid() {
 
           {/* Game Over Overlay */}
           {phase === 'lost' && (
-            <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-20 animate-fadeIn rounded-sm">
+            <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-20 animate-fadeIn">
               <div className="relative">
                 <div className="absolute inset-0 blur-2xl bg-red-500/15 rounded-full" />
                 <div className="relative text-3xl sm:text-5xl font-bold tracking-wider bg-gradient-to-r from-red-400 via-orange-300 to-red-500 bg-clip-text text-transparent mb-3">
@@ -290,55 +319,10 @@ export default function VoltGrid() {
         </div>
       </div>
 
-      {/* ── Bottom: Instructions (desktop) / D-pad (touch) ── */}
-      <div className="shrink-0 px-3 sm:px-6 pb-1 sm:pb-2 pt-0.5 sm:pt-1">
-        {isTouchDevice ? (
-          /* Touch D-Pad */
-          <div className="flex justify-center">
-            <div className="relative w-[140px] h-[140px] sm:w-[160px] sm:h-[160px]">
-              {/* Up */}
-              <button
-                className="dpad-btn absolute top-0 left-1/2 -translate-x-1/2 w-[44px] h-[44px] sm:w-[50px] sm:h-[50px]"
-                onTouchStart={handleDpadTouch('up')}
-                onTouchEnd={handleDpadRelease}
-                onTouchCancel={handleDpadRelease}
-              >
-                <DpadArrow direction="up" />
-              </button>
-              {/* Down */}
-              <button
-                className="dpad-btn absolute bottom-0 left-1/2 -translate-x-1/2 w-[44px] h-[44px] sm:w-[50px] sm:h-[50px]"
-                onTouchStart={handleDpadTouch('down')}
-                onTouchEnd={handleDpadRelease}
-                onTouchCancel={handleDpadRelease}
-              >
-                <DpadArrow direction="down" />
-              </button>
-              {/* Left */}
-              <button
-                className="dpad-btn absolute left-0 top-1/2 -translate-y-1/2 w-[44px] h-[44px] sm:w-[50px] sm:h-[50px]"
-                onTouchStart={handleDpadTouch('left')}
-                onTouchEnd={handleDpadRelease}
-                onTouchCancel={handleDpadRelease}
-              >
-                <DpadArrow direction="left" />
-              </button>
-              {/* Right */}
-              <button
-                className="dpad-btn absolute right-0 top-1/2 -translate-y-1/2 w-[44px] h-[44px] sm:w-[50px] sm:h-[50px]"
-                onTouchStart={handleDpadTouch('right')}
-                onTouchEnd={handleDpadRelease}
-                onTouchCancel={handleDpadRelease}
-              >
-                <DpadArrow direction="right" />
-              </button>
-              {/* Center dot */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-cyan-900/30 border border-cyan-800/20" />
-            </div>
-          </div>
-        ) : (
-          /* Desktop Instructions */
-          <div className="flex flex-wrap items-center justify-center gap-x-5 gap-y-0.5 text-cyan-800/40 text-[10px] sm:text-xs tracking-wide">
+      {/* ── Bottom: compact desktop hint only ────────────────── */}
+      {!isTouchDevice && (
+        <div className="shrink-0 px-3 sm:px-5 pb-1.5 sm:pb-2 pt-0.5">
+          <div className="flex items-center justify-center gap-4 text-cyan-800/40 text-[10px] sm:text-xs tracking-wide">
             <span>
               <kbd className="px-1 py-0.5 bg-cyan-950/20 border border-cyan-900/20 rounded text-[9px] text-cyan-600/50 font-mono">
                 Arrows
@@ -347,40 +331,12 @@ export default function VoltGrid() {
               <kbd className="px-1 py-0.5 bg-cyan-950/20 border border-cyan-900/20 rounded text-[9px] text-cyan-600/50 font-mono">
                 WASD
               </kbd>
+              {' to move'}
             </span>
-            <span>Trail inward from border</span>
-            <span>Reach the wall to capture</span>
-            <span className="text-red-700/40">Orb on trail sends a chaser</span>
-            <span className="text-red-700/40">Direct orb hit = instant death</span>
+            <span className="hidden sm:inline">Trail inward from border to capture</span>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
-  );
-}
-
-// ─── D-Pad Arrow SVG ──────────────────────────────────────────────
-
-function DpadArrow({ direction }: { direction: 'up' | 'down' | 'left' | 'right' }) {
-  const rotation = {
-    up: '0',
-    right: '90',
-    down: '180',
-    left: '270',
-  }[direction];
-
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      className="w-full h-full"
-      style={{ transform: `rotate(${rotation}deg)` }}
-    >
-      <polygon
-        points="12,4 20,16 4,16"
-        fill="rgba(0, 255, 204, 0.25)"
-        stroke="rgba(0, 255, 204, 0.5)"
-        strokeWidth="1"
-      />
-    </svg>
   );
 }

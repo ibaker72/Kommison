@@ -246,23 +246,35 @@ export function updateGame(state: GameState, input: InputState): GameState {
 
 // ─── Player Movement ──────────────────────────────────────────────
 
+/**
+ * Determine which border edge the player is on and whether the
+ * requested direction moves them away from that edge (into the arena interior).
+ */
 function isMovingAwayFromBorder(px: number, py: number, dir: { dx: number; dy: number }): boolean {
-  const bw = BORDER_WIDTH;
-  const hw = bw / 2;
-  // Determine which border edge we're on and if direction moves away from it
+  const hw = BORDER_WIDTH / 2;
   const distLeft = px - hw;
   const distRight = (ARENA_WIDTH - hw) - px;
   const distTop = py - hw;
   const distBottom = (ARENA_HEIGHT - hw) - py;
   const minDist = Math.min(distLeft, distRight, distTop, distBottom);
 
-  if (minDist === distLeft && dir.dx > 0) return true;   // on left, moving right
-  if (minDist === distRight && dir.dx < 0) return true;  // on right, moving left
   if (minDist === distTop && dir.dy > 0) return true;    // on top, moving down
   if (minDist === distBottom && dir.dy < 0) return true;  // on bottom, moving up
+  if (minDist === distLeft && dir.dx > 0) return true;   // on left, moving right
+  if (minDist === distRight && dir.dx < 0) return true;  // on right, moving left
   return false;
 }
 
+/**
+ * Update the player position based on current direction.
+ *
+ * The movement has three clear states:
+ *   1. ON-BORDER: moving along the border edge, snapped to it.
+ *   2. DEPARTING: intentionally leaving the border to trail into the arena.
+ *   3. TRAILING: off-border, creating a trail. Can reconnect to border.
+ *
+ * Returns true if the player hit their own trail (death).
+ */
 function updatePlayer(
   player: Player,
   dir: { dx: number; dy: number },
@@ -271,108 +283,80 @@ function updatePlayer(
   if (dir.dx === 0 && dir.dy === 0) return false;
 
   const bw = BORDER_WIDTH;
-  const speed = player.onBorder ? PLAYER_SPEED_BORDER : PLAYER_SPEED_TRAIL;
-  const wasOnBorder = player.onBorder;
+  const hw = bw / 2;
 
-  let nx = player.x + dir.dx * speed;
-  let ny = player.y + dir.dy * speed;
-
-  nx = clamp(nx, bw / 2, ARENA_WIDTH - bw / 2);
-  ny = clamp(ny, bw / 2, ARENA_HEIGHT - bw / 2);
-
-  const nowOnBorder = isOnBorder(nx, ny);
-
-  // When on border and moving along it, stay on border
-  // When on border and moving AWAY from it, allow departure into interior
-  if (wasOnBorder && nowOnBorder) {
+  // ── STATE 1 & 2: Player is on the border ──────────────────────
+  if (player.onBorder) {
     if (isMovingAwayFromBorder(player.x, player.y, dir)) {
-      // Force departure from border — start trail
+      // ── DEPARTING: leave the border, start a trail ──────────
       const snapped = snapToBorder(player.x, player.y);
       player.trail = [{ x: snapped.x, y: snapped.y }];
       player.onBorder = false;
-      // Use trail speed for the interior move
-      nx = player.x + dir.dx * PLAYER_SPEED_TRAIL;
-      ny = player.y + dir.dy * PLAYER_SPEED_TRAIL;
-      nx = clamp(nx, bw / 2, ARENA_WIDTH - bw / 2);
-      ny = clamp(ny, bw / 2, ARENA_HEIGHT - bw / 2);
-    } else {
-      // Moving along the border
+
+      // Move one frame at trail speed into the arena
+      const nx = clamp(player.x + dir.dx * PLAYER_SPEED_TRAIL, hw, ARENA_WIDTH - hw);
+      const ny = clamp(player.y + dir.dy * PLAYER_SPEED_TRAIL, hw, ARENA_HEIGHT - hw);
+      player.x = nx;
+      player.y = ny;
+      player.trail.push({ x: nx, y: ny });
+      player.direction = dir;
+      // CRITICAL: return immediately — do NOT fall through to border-snap checks
+      return false;
+    }
+
+    // ── ON-BORDER: moving along the border ──────────────────
+    const nx = clamp(player.x + dir.dx * PLAYER_SPEED_BORDER, hw, ARENA_WIDTH - hw);
+    const ny = clamp(player.y + dir.dy * PLAYER_SPEED_BORDER, hw, ARENA_HEIGHT - hw);
+    const snapped = snapToBorder(nx, ny);
+    player.x = snapped.x;
+    player.y = snapped.y;
+    player.onBorder = true;
+    player.direction = dir;
+    return false;
+  }
+
+  // ── STATE 3: Player is off-border (trailing) ──────────────────
+  const nx = clamp(player.x + dir.dx * PLAYER_SPEED_TRAIL, hw, ARENA_WIDTH - hw);
+  const ny = clamp(player.y + dir.dy * PLAYER_SPEED_TRAIL, hw, ARENA_HEIGHT - hw);
+
+  // Check if entering a captured region → treat as border reconnection
+  for (const region of capturedRegions) {
+    if (pointInPolygon({ x: nx, y: ny }, region.points)) {
       const snapped = snapToBorder(nx, ny);
       player.x = snapped.x;
       player.y = snapped.y;
       player.onBorder = true;
+      player.trail.push({ x: snapped.x, y: snapped.y });
       player.direction = dir;
       return false;
     }
   }
 
-  if (wasOnBorder && !nowOnBorder && player.trail.length === 0) {
-    const snapped = snapToBorder(player.x, player.y);
-    player.trail = [{ x: snapped.x, y: snapped.y }];
-    player.onBorder = false;
+  // Self-trail collision check
+  if (player.trail.length > 4) {
+    const from = { x: player.x, y: player.y };
+    const to = { x: nx, y: ny };
+    if (selfTrailCollision(from, to, player.trail, 4)) {
+      return true;
+    }
   }
 
-  // Interior movement (off border)
-  if (!player.onBorder) {
-    // Check if entering a captured region — treat as border reconnection
-    for (const region of capturedRegions) {
-      if (pointInPolygon({ x: nx, y: ny }, region.points)) {
-        const snapped = snapToBorder(nx, ny);
-        player.x = snapped.x;
-        player.y = snapped.y;
-        player.onBorder = true;
-        if (player.trail.length > 0) {
-          player.trail.push({ x: snapped.x, y: snapped.y });
-        }
-        player.direction = dir;
-        return false;
-      }
-    }
+  player.x = nx;
+  player.y = ny;
 
-    // Self-trail collision check
-    if (player.trail.length > 4) {
-      const from = { x: player.x, y: player.y };
-      const to = { x: nx, y: ny };
-      if (selfTrailCollision(from, to, player.trail, 4)) {
-        return true;
-      }
-    }
-
-    player.x = nx;
-    player.y = ny;
-
-    // Check if we've returned to border
-    if (isOnBorder(nx, ny)) {
-      const snapped = snapToBorder(nx, ny);
-      player.x = snapped.x;
-      player.y = snapped.y;
-      player.onBorder = true;
-      if (player.trail.length > 0) {
-        player.trail.push({ x: snapped.x, y: snapped.y });
-      }
-    } else {
-      player.onBorder = false;
-      const trail = player.trail;
-      if (trail.length === 0) {
-        trail.push({ x: nx, y: ny });
-      } else {
-        const last = trail[trail.length - 1];
-        const dist = Math.abs(nx - last.x) + Math.abs(ny - last.y);
-        if (dist >= 2) {
-          trail.push({ x: nx, y: ny });
-        }
-      }
-    }
+  // Check if we've returned to border → reconnect
+  if (isOnBorder(nx, ny)) {
+    const snapped = snapToBorder(nx, ny);
+    player.x = snapped.x;
+    player.y = snapped.y;
+    player.onBorder = true;
+    player.trail.push({ x: snapped.x, y: snapped.y });
   } else {
-    // Still on border (wasn't forced off above)
-    if (nowOnBorder) {
-      const snapped = snapToBorder(nx, ny);
-      player.x = snapped.x;
-      player.y = snapped.y;
-      player.onBorder = true;
-      if (player.trail.length > 0) {
-        player.trail.push({ x: snapped.x, y: snapped.y });
-      }
+    // Still in the interior — record trail point
+    const trail = player.trail;
+    const last = trail[trail.length - 1];
+    if (!last || Math.abs(nx - last.x) + Math.abs(ny - last.y) >= 2) {
+      trail.push({ x: nx, y: ny });
     }
   }
 
