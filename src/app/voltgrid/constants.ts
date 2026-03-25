@@ -1,56 +1,43 @@
-// ─── Game Constants ───────────────────────────────────────────────
+export const ARENA_WIDTH = 960;
+export const ARENA_HEIGHT = 540;
+export const BORDER_THICKNESS = 8;
 
-// 16:9 arena for widescreen/immersive feel
-export const ARENA_WIDTH = 800;
-export const ARENA_HEIGHT = 450;
-export const BORDER_WIDTH = 4;
+export const GRID_CELL_SIZE = 6;
+export const GRID_COLS = Math.floor(ARENA_WIDTH / GRID_CELL_SIZE);
+export const GRID_ROWS = Math.floor(ARENA_HEIGHT / GRID_CELL_SIZE);
 
-export const PLAYER_SIZE = 24;
-export const PLAYER_SPEED_BORDER = 5;
-export const PLAYER_SPEED_TRAIL = 3.5;
-export const PLAYER_COLOR = '#00ffcc';
-export const PLAYER_GLOW_COLOR = 'rgba(0, 255, 204, 0.8)';
-export const PLAYER_HIT_RADIUS = 8;
-export const PLAYER_EMOJI = '⚡';
+export const PLAYER_RADIUS = 12;
+export const PLAYER_BORDER_SPEED = 240;
+export const PLAYER_TRAIL_SPEED = 200;
+export const PLAYER_HIT_RADIUS = 10;
 
-export const TRAIL_COLOR = '#ff00ff';
-export const TRAIL_GLOW_COLOR = 'rgba(255, 0, 255, 0.6)';
-export const TRAIL_INFECTED_COLOR = '#ff3333';
-export const TRAIL_INFECTED_GLOW = 'rgba(255, 50, 50, 0.7)';
-export const TRAIL_WIDTH = 3;
+export const ORB_RADIUS = 11;
+export const ORB_SPEED = 180;
 
-export const ORB_RADIUS = 8;
-export const ORB_BASE_SPEED = 2.5;
-export const ORB_COLOR = '#ffcc00';
-export const ORB_GLOW_COLOR = 'rgba(255, 204, 0, 0.8)';
-
-export const CHASER_SPEED = 5;
-export const CHASER_RADIUS = 6;
-export const CHASER_COLOR = '#ff4444';
-export const CHASER_GLOW = 'rgba(255, 68, 68, 0.9)';
+export const CHASER_RADIUS = 7;
+export const CHASER_SPEED = 260;
 
 export const INITIAL_LIVES = 3;
-export const WIN_PERCENTAGE = 70;
+export const TARGET_REVEAL_PERCENT = 72;
+export const RESPAWN_INVULN_MS = 1200;
 
-export const INVULN_FRAMES = 30;
+export const TRAIL_POINT_SPACING = 4;
+export const TRAIL_HIT_WIDTH = 4;
 
-export const GRID_SPACING = 30;
-export const GRID_COLOR = 'rgba(0, 255, 204, 0.04)';
+export const SHAKE_MS = 220;
 
-export const BG_COLOR = '#0a0a1a';
-export const ARENA_BG_COLOR = '#0d0d24';
-export const ARENA_BORDER_COLOR = '#00ffcc';
-export const ARENA_BORDER_GLOW = 'rgba(0, 255, 204, 0.5)';
-
-export const CAPTURED_FILL = 'rgba(0, 255, 204, 0.15)';
-export const CAPTURED_BORDER = 'rgba(0, 255, 204, 0.3)';
-
-export const BORDER_TOLERANCE = 3;
-
-export const DIRECTIONS = {
-  UP: { dx: 0, dy: -1 },
-  DOWN: { dx: 0, dy: 1 },
-  LEFT: { dx: -1, dy: 0 },
-  RIGHT: { dx: 1, dy: 0 },
-  NONE: { dx: 0, dy: 0 },
-} as const;
+export const PALETTE = {
+  pageBg: '#03040d',
+  arenaBg: '#0b0f23',
+  border: '#51ffe2',
+  borderGlow: 'rgba(81,255,226,0.7)',
+  grid: 'rgba(81,255,226,0.1)',
+  trail: '#ff4dff',
+  trailGlow: 'rgba(255,77,255,0.7)',
+  infectedTrail: '#ff5d66',
+  capturedFill: 'rgba(64, 255, 225, 0.16)',
+  orb: '#ffcf52',
+  orbGlow: 'rgba(255,207,82,0.7)',
+  chaser: '#ff4d6d',
+  chaserGlow: 'rgba(255,77,109,0.8)',
+};

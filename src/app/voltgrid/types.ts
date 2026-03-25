@@ -1,58 +1,53 @@
-// ─── Type Definitions ─────────────────────────────────────────────
+export type GamePhase = 'start' | 'playing' | 'won' | 'lost' | 'paused';
 
-export interface Point {
+export interface Vec2 {
   x: number;
   y: number;
-}
-
-export interface Direction {
-  dx: number;
-  dy: number;
 }
 
 export interface Player {
-  x: number;
-  y: number;
-  direction: Direction;
+  pos: Vec2;
+  vel: Vec2;
   onBorder: boolean;
-  trail: Point[];
+  trail: Vec2[];
   lives: number;
-  invulnFrames: number;
+  invulnMs: number;
+  heading: number;
 }
 
 export interface Orb {
-  x: number;
-  y: number;
-  dx: number;
-  dy: number;
+  pos: Vec2;
+  vel: Vec2;
   radius: number;
 }
 
-/** A spark chaser that travels along the player's active trail toward the player. */
 export interface TrailChaser {
-  /** Fractional index along the trail (0 = trail start, trail.length-1 = trail end). */
-  trailPos: number;
-  /** Current interpolated world position */
-  x: number;
-  y: number;
+  distanceAlong: number;
+  pathLength: number;
+  pos: Vec2;
   active: boolean;
 }
 
-export interface CapturedRegion {
-  points: Point[];
+export interface Particle {
+  pos: Vec2;
+  vel: Vec2;
+  lifeMs: number;
+  maxLifeMs: number;
+  size: number;
+  color: string;
 }
 
-export type GamePhase = 'playing' | 'won' | 'lost';
-
 export interface GameState {
-  player: Player;
-  orbs: Orb[];
-  trailChaser: TrailChaser | null;
-  capturedRegions: CapturedRegion[];
-  revealPercentage: number;
   phase: GamePhase;
-  arenaWidth: number;
-  arenaHeight: number;
+  player: Player;
+  orb: Orb;
+  chaser: TrailChaser | null;
+  captured: Uint8Array;
+  capturedCount: number;
+  revealPct: number;
+  shakeMs: number;
+  particles: Particle[];
+  statusText: string;
 }
 
 export interface InputState {
@@ -60,27 +55,18 @@ export interface InputState {
   down: boolean;
   left: boolean;
   right: boolean;
+  pointerActive: boolean;
 }
 
-// ─── Future Extension Types ───────────────────────────────────────
+export type GameEvent =
+  | 'death-hit'
+  | 'trail-infected'
+  | 'safe-reconnect'
+  | 'capture'
+  | 'win'
+  | 'game-over';
 
-export interface SoundEffect {
-  name: string;
-  play: () => void;
-}
-
-export interface ParticleConfig {
-  x: number;
-  y: number;
-  color: string;
-  count: number;
-  lifetime: number;
-}
-
-export interface LevelConfig {
-  orbCount: number;
-  orbSpeed: number;
-  winPercentage: number;
-  arenaWidth: number;
-  arenaHeight: number;
+export interface StepResult {
+  state: GameState;
+  events: GameEvent[];
 }

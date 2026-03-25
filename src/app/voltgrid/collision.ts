@@ -1,210 +1,133 @@
-import { Point, Orb, CapturedRegion } from './types';
-import { ARENA_WIDTH, ARENA_HEIGHT, BORDER_WIDTH, PLAYER_HIT_RADIUS } from './constants';
 import {
-  distance,
-  pointInPolygon,
-  polygonArea,
-  pointToSegmentDistance,
-  segmentsIntersect,
-} from './utils';
+  ARENA_HEIGHT,
+  ARENA_WIDTH,
+  BORDER_THICKNESS,
+  GRID_CELL_SIZE,
+  GRID_COLS,
+  GRID_ROWS,
+  TRAIL_HIT_WIDTH,
+} from './constants';
+import type { Orb, Vec2 } from './types';
+import { cellIndex, pointToSegmentDistance, worldToCell } from './utils';
 
-// ─── Orb ↔ Trail Collision ───────────────────────────────────────
+export const isOnBorder = (p: Vec2): boolean =>
+  p.x <= BORDER_THICKNESS ||
+  p.x >= ARENA_WIDTH - BORDER_THICKNESS ||
+  p.y <= BORDER_THICKNESS ||
+  p.y >= ARENA_HEIGHT - BORDER_THICKNESS;
 
-/** Find the trail segment index where the orb first touches the trail.
- *  Returns the fractional index, or -1 if no collision. */
-export function findOrbTrailHitIndex(orb: Orb, trail: Point[]): number {
-  if (trail.length < 2) return -1;
+export const snapToBorder = (p: Vec2): Vec2 => {
+  const left = p.x;
+  const right = ARENA_WIDTH - p.x;
+  const top = p.y;
+  const bottom = ARENA_HEIGHT - p.y;
+  const min = Math.min(left, right, top, bottom);
+  if (min === top) return { x: p.x, y: BORDER_THICKNESS / 2 };
+  if (min === bottom) return { x: p.x, y: ARENA_HEIGHT - BORDER_THICKNESS / 2 };
+  if (min === left) return { x: BORDER_THICKNESS / 2, y: p.y };
+  return { x: ARENA_WIDTH - BORDER_THICKNESS / 2, y: p.y };
+};
 
-  const orbPt = { x: orb.x, y: orb.y };
-  for (let i = 0; i < trail.length - 1; i++) {
-    if (pointToSegmentDistance(orbPt, trail[i], trail[i + 1]) < orb.radius + 1) {
-      // Return fractional position: project orb center onto segment
-      const a = trail[i];
-      const b = trail[i + 1];
-      const dx = b.x - a.x;
-      const dy = b.y - a.y;
-      const lenSq = dx * dx + dy * dy;
-      if (lenSq === 0) return i;
-      const t = Math.max(0, Math.min(1, ((orbPt.x - a.x) * dx + (orbPt.y - a.y) * dy) / lenSq));
-      return i + t;
+export const orbHitsTrail = (orb: Orb, trail: Vec2[]): number => {
+  for (let i = 1; i < trail.length; i++) {
+    const d = pointToSegmentDistance(orb.pos, trail[i - 1], trail[i]);
+    if (d <= orb.radius + TRAIL_HIT_WIDTH) {
+      return i - 1;
     }
   }
   return -1;
-}
+};
 
-// ─── Orb ↔ Player Direct Hit ────────────────────────────────────
+export const buildTrailBlockMask = (trail: Vec2[]): Uint8Array => {
+  const mask = new Uint8Array(GRID_COLS * GRID_ROWS);
+  if (trail.length < 2) return mask;
 
-/** Check if the orb directly touches the player icon */
-export function orbHitsPlayer(orb: Orb, px: number, py: number): boolean {
-  const d = distance({ x: orb.x, y: orb.y }, { x: px, y: py });
-  return d < orb.radius + PLAYER_HIT_RADIUS;
-}
-
-// ─── Self-Trail Collision ─────────────────────────────────────────
-
-export function selfTrailCollision(
-  from: Point,
-  to: Point,
-  trail: Point[],
-  skipTail = 3
-): boolean {
-  if (trail.length < 2) return false;
-
-  const checkEnd = Math.max(0, trail.length - 1 - skipTail);
-  for (let i = 0; i < checkEnd; i++) {
-    if (segmentsIntersect(from, to, trail[i], trail[i + 1])) {
-      return true;
+  for (let i = 1; i < trail.length; i++) {
+    const a = trail[i - 1];
+    const b = trail[i];
+    const segLen = Math.hypot(b.x - a.x, b.y - a.y);
+    const steps = Math.max(1, Math.ceil(segLen / (GRID_CELL_SIZE * 0.4)));
+    for (let s = 0; s <= steps; s++) {
+      const t = s / steps;
+      const x = a.x + (b.x - a.x) * t;
+      const y = a.y + (b.y - a.y) * t;
+      const c = worldToCell({ x, y });
+      mask[cellIndex(c.x, c.y)] = 1;
     }
   }
-  return false;
-}
+  return mask;
+};
 
-// ─── Orb Boundary Bounce ─────────────────────────────────────────
+export const applyCapture = (captured: Uint8Array, trail: Vec2[], orbPos: Vec2): { next: Uint8Array; capturedDelta: number } => {
+  const next = new Uint8Array(captured);
+  const trailMask = buildTrailBlockMask(trail);
+  const visited = new Uint8Array(GRID_COLS * GRID_ROWS);
+  const qx = new Int16Array(GRID_COLS * GRID_ROWS);
+  const qy = new Int16Array(GRID_COLS * GRID_ROWS);
 
-export function bounceOrb(orb: Orb, capturedRegions: CapturedRegion[]): void {
-  const bw = BORDER_WIDTH;
-  const r = orb.radius;
+  const start = worldToCell(orbPos);
+  let head = 0;
+  let tail = 0;
+  const push = (x: number, y: number): void => {
+    qx[tail] = x;
+    qy[tail] = y;
+    tail++;
+  };
 
-  if (orb.x - r <= bw) {
-    orb.x = bw + r;
-    orb.dx = Math.abs(orb.dx);
-  }
-  if (orb.x + r >= ARENA_WIDTH - bw) {
-    orb.x = ARENA_WIDTH - bw - r;
-    orb.dx = -Math.abs(orb.dx);
-  }
-  if (orb.y - r <= bw) {
-    orb.y = bw + r;
-    orb.dy = Math.abs(orb.dy);
-  }
-  if (orb.y + r >= ARENA_HEIGHT - bw) {
-    orb.y = ARENA_HEIGHT - bw - r;
-    orb.dy = -Math.abs(orb.dy);
+  push(start.x, start.y);
+  visited[cellIndex(start.x, start.y)] = 1;
+
+  while (head < tail) {
+    const x = qx[head];
+    const y = qy[head];
+    head++;
+
+    const neighbors = [
+      [x + 1, y],
+      [x - 1, y],
+      [x, y + 1],
+      [x, y - 1],
+    ];
+
+    for (const [nx, ny] of neighbors) {
+      if (nx < 0 || ny < 0 || nx >= GRID_COLS || ny >= GRID_ROWS) continue;
+      const idx = cellIndex(nx, ny);
+      if (visited[idx] || next[idx] || trailMask[idx]) continue;
+      visited[idx] = 1;
+      push(nx, ny);
+    }
   }
 
-  for (const region of capturedRegions) {
-    const orbPt = { x: orb.x, y: orb.y };
-    if (pointInPolygon(orbPt, region.points)) {
-      let minDist = Infinity;
-      let nearestNormalX = 0;
-      let nearestNormalY = 0;
-      const pts = region.points;
-      for (let i = 0; i < pts.length; i++) {
-        const a = pts[i];
-        const b = pts[(i + 1) % pts.length];
-        const d = pointToSegmentDistance(orbPt, a, b);
-        if (d < minDist) {
-          minDist = d;
-          const edgeDx = b.x - a.x;
-          const edgeDy = b.y - a.y;
-          const len = Math.sqrt(edgeDx * edgeDx + edgeDy * edgeDy) || 1;
-          nearestNormalX = -edgeDy / len;
-          nearestNormalY = edgeDx / len;
-        }
+  let capturedDelta = 0;
+  for (let y = 0; y < GRID_ROWS; y++) {
+    for (let x = 0; x < GRID_COLS; x++) {
+      const idx = cellIndex(x, y);
+      if (next[idx] || trailMask[idx]) continue;
+      if (!visited[idx]) {
+        next[idx] = 1;
+        capturedDelta++;
       }
-
-      const dot = orb.dx * nearestNormalX + orb.dy * nearestNormalY;
-      orb.dx -= 2 * dot * nearestNormalX;
-      orb.dy -= 2 * dot * nearestNormalY;
-      orb.x += orb.dx * 3;
-      orb.y += orb.dy * 3;
-      break;
     }
   }
-}
 
-// ─── Area Capture Logic ──────────────────────────────────────────
+  return { next, capturedDelta };
+};
 
-export function buildCapturePolygon(
-  trail: Point[],
-  orbs: { x: number; y: number }[],
-): Point[] | null {
-  if (trail.length < 3) return null;
+export const bounceOrb = (orb: Orb, captured: Uint8Array, dt: number): void => {
+  const nextX = orb.pos.x + orb.vel.x * dt;
+  const nextY = orb.pos.y + orb.vel.y * dt;
 
-  const start = trail[0];
-  const end = trail[trail.length - 1];
+  const wouldHitBoundsX = nextX - orb.radius <= BORDER_THICKNESS || nextX + orb.radius >= ARENA_WIDTH - BORDER_THICKNESS;
+  const wouldHitBoundsY = nextY - orb.radius <= BORDER_THICKNESS || nextY + orb.radius >= ARENA_HEIGHT - BORDER_THICKNESS;
 
-  const cwBorder = walkBorder(end, start, true);
-  const ccwBorder = walkBorder(end, start, false);
+  if (wouldHitBoundsX) orb.vel.x *= -1;
+  if (wouldHitBoundsY) orb.vel.y *= -1;
 
-  const poly1 = [...trail, ...cwBorder];
-  const poly2 = [...trail, ...ccwBorder];
+  const cx = worldToCell({ x: nextX, y: orb.pos.y });
+  const cy = worldToCell({ x: orb.pos.x, y: nextY });
+  if (captured[cellIndex(cx.x, cx.y)]) orb.vel.x *= -1;
+  if (captured[cellIndex(cy.x, cy.y)]) orb.vel.y *= -1;
 
-  const area1 = polygonArea(poly1);
-  const area2 = polygonArea(poly2);
-
-  if (area1 < 10 && area2 < 10) return null;
-
-  const orb = orbs[0];
-  const orbPt = { x: orb.x, y: orb.y };
-  const orb1Inside = pointInPolygon(orbPt, poly1);
-  const orb2Inside = pointInPolygon(orbPt, poly2);
-
-  if (!orb1Inside && !orb2Inside) {
-    return area1 < area2 ? poly1 : poly2;
-  }
-  if (!orb1Inside) return poly1;
-  if (!orb2Inside) return poly2;
-
-  return area1 < area2 ? poly1 : poly2;
-}
-
-// ─── Border Walking ──────────────────────────────────────────────
-
-function getEdge(p: Point): number {
-  const bw = BORDER_WIDTH;
-  const tol = bw + 2;
-  if (p.y <= tol) return 0;
-  if (p.x >= ARENA_WIDTH - tol) return 1;
-  if (p.y >= ARENA_HEIGHT - tol) return 2;
-  return 3;
-}
-
-function walkBorder(from: Point, to: Point, clockwise: boolean): Point[] {
-  const hw = BORDER_WIDTH / 2;
-  const maxX = ARENA_WIDTH - hw;
-  const maxY = ARENA_HEIGHT - hw;
-
-  const corners: Point[] = [
-    { x: hw, y: hw },
-    { x: maxX, y: hw },
-    { x: maxX, y: maxY },
-    { x: hw, y: maxY },
-  ];
-
-  const fromEdge = getEdge(from);
-  const toEdge = getEdge(to);
-
-  const result: Point[] = [];
-  let currentEdge = fromEdge;
-  const step = clockwise ? 1 : -1;
-
-  let iters = 0;
-  while (currentEdge !== toEdge && iters < 5) {
-    if (clockwise) {
-      result.push({ ...corners[(currentEdge + 1) % 4] });
-    } else {
-      result.push({ ...corners[currentEdge] });
-    }
-    currentEdge = ((currentEdge + step) + 4) % 4;
-    iters++;
-  }
-
-  result.push({ x: to.x, y: to.y });
-
-  return result;
-}
-
-export function calculateRevealPercentage(
-  regions: CapturedRegion[]
-): number {
-  const bw = BORDER_WIDTH;
-  const totalArea = (ARENA_WIDTH - 2 * bw) * (ARENA_HEIGHT - 2 * bw);
-  let capturedArea = 0;
-
-  for (const region of regions) {
-    capturedArea += polygonArea(region.points);
-  }
-
-  return Math.min(100, (capturedArea / totalArea) * 100);
-}
+  orb.pos.x += orb.vel.x * dt;
+  orb.pos.y += orb.vel.y * dt;
+};

@@ -1,346 +1,256 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState } from 'react';
-import { InputState, GameState } from './types';
-import { ARENA_WIDTH, ARENA_HEIGHT, WIN_PERCENTAGE, INITIAL_LIVES } from './constants';
-import { createInitialState, updateGame } from './gameLoop';
-import { render, resetBackgroundCache } from './render';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { INITIAL_LIVES, TARGET_REVEAL_PERCENT } from './constants';
+import { VoltGridAudio } from './audio';
+import { createInitialState, startGame, stepGame } from './gameLoop';
+import { renderGame } from './render';
+import type { GamePhase, GameState, InputState } from './types';
 
-// ─── VoltGrid Game Component ──────────────────────────────────────
+const initialInput: InputState = {
+  up: false,
+  down: false,
+  left: false,
+  right: false,
+  pointerActive: false,
+};
 
 export default function VoltGrid() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const wrapperRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<number>(0);
   const stateRef = useRef<GameState>(createInitialState());
-  const inputRef = useRef<InputState>({ up: false, down: false, left: false, right: false });
-  const animFrameRef = useRef<number>(0);
-  const touchOriginRef = useRef<{ x: number; y: number } | null>(null);
+  const inputRef = useRef<InputState>({ ...initialInput });
+  const lastTimeRef = useRef<number>(0);
+  const pointerIdRef = useRef<number | null>(null);
+  const audioRef = useRef<VoltGridAudio>(new VoltGridAudio());
 
-  const [revealPct, setRevealPct] = useState(0);
+  const [phase, setPhase] = useState<GamePhase>('start');
   const [lives, setLives] = useState(INITIAL_LIVES);
-  const [phase, setPhase] = useState<GameState['phase']>('playing');
-  const [isTouchDevice, setIsTouchDevice] = useState(false);
-  const [hasChaser, setHasChaser] = useState(false);
+  const [revealPct, setRevealPct] = useState(0);
+  const [statusText, setStatusText] = useState('Trace, trap, and dominate the grid.');
+  const [muted, setMuted] = useState(false);
 
-  // ─── Detect Touch ──────────────────────────────────────────
-  useEffect(() => {
-    const isCoarsePointer = window.matchMedia('(pointer: coarse)').matches;
-    const isSmallScreen = window.innerWidth <= 1024;
-    if (isCoarsePointer && isSmallScreen) {
-      setIsTouchDevice(true);
-    }
-    const onFirstTouch = () => {
-      if (window.matchMedia('(pointer: coarse)').matches) {
-        setIsTouchDevice(true);
-      }
-    };
-    window.addEventListener('touchstart', onFirstTouch, { once: true });
-    return () => window.removeEventListener('touchstart', onFirstTouch);
+  const syncHud = useCallback((s: GameState) => {
+    setPhase(s.phase);
+    setLives(s.player.lives);
+    setRevealPct(s.revealPct);
+    setStatusText(s.statusText);
   }, []);
 
-  // ─── Keyboard Input ────────────────────────────────────────
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    const input = inputRef.current;
-    switch (e.key) {
-      case 'ArrowUp': case 'w': case 'W':
-        input.up = true; input.down = false; e.preventDefault(); break;
-      case 'ArrowDown': case 's': case 'S':
-        input.down = true; input.up = false; e.preventDefault(); break;
-      case 'ArrowLeft': case 'a': case 'A':
-        input.left = true; input.right = false; e.preventDefault(); break;
-      case 'ArrowRight': case 'd': case 'D':
-        input.right = true; input.left = false; e.preventDefault(); break;
-    }
-  }, []);
-
-  const handleKeyUp = useCallback((e: KeyboardEvent) => {
-    const input = inputRef.current;
-    switch (e.key) {
-      case 'ArrowUp': case 'w': case 'W': input.up = false; break;
-      case 'ArrowDown': case 's': case 'S': input.down = false; break;
-      case 'ArrowLeft': case 'a': case 'A': input.left = false; break;
-      case 'ArrowRight': case 'd': case 'D': input.right = false; break;
-    }
-  }, []);
-
-  // ─── Touch Input (virtual joystick on entire game surface) ──
-  const handleTouchStart = useCallback((e: TouchEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const touch = e.touches[0];
-    touchOriginRef.current = { x: touch.clientX, y: touch.clientY };
-  }, []);
-
-  const handleTouchMove = useCallback((e: TouchEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!touchOriginRef.current || e.touches.length === 0) return;
-    const touch = e.touches[0];
-    const dx = touch.clientX - touchOriginRef.current.x;
-    const dy = touch.clientY - touchOriginRef.current.y;
-
-    const deadZone = 8;
-    const input = inputRef.current;
-
-    if (Math.abs(dx) < deadZone && Math.abs(dy) < deadZone) {
-      return; // Stay in dead zone, keep current direction
-    }
-
-    if (Math.abs(dx) > Math.abs(dy)) {
-      input.left = dx < 0;
-      input.right = dx > 0;
-      input.up = false;
-      input.down = false;
-    } else {
-      input.up = dy < 0;
-      input.down = dy > 0;
-      input.left = false;
-      input.right = false;
-    }
-  }, []);
-
-  const handleTouchEnd = useCallback((e: TouchEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    touchOriginRef.current = null;
-    const input = inputRef.current;
-    input.up = false;
-    input.down = false;
-    input.left = false;
-    input.right = false;
-  }, []);
-
-  // ─── Restart ─────────────────────────────────────────────────
-  const restart = useCallback(() => {
-    resetBackgroundCache();
-    stateRef.current = createInitialState();
-    inputRef.current = { up: false, down: false, left: false, right: false };
-    setRevealPct(0);
-    setLives(INITIAL_LIVES);
-    setPhase('playing');
-    setHasChaser(false);
-  }, []);
-
-  // ─── Canvas Resize ──────────────────────────────────────────
-  // Canvas fills the entire wrapper. The render function handles
-  // scaling and centering the arena within the canvas.
-  const resizeCanvas = useCallback(() => {
+  const resize = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const container = canvas.parentElement;
-    if (!container) return;
-
-    const w = container.clientWidth;
-    const h = container.clientHeight;
-    if (w === 0 || h === 0) return;
-
+    const rect = canvas.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
-    canvas.width = w * dpr;
-    canvas.height = h * dpr;
-    canvas.style.width = `${w}px`;
-    canvas.style.height = `${h}px`;
+    canvas.width = Math.floor(rect.width * dpr);
+    canvas.height = Math.floor(rect.height * dpr);
   }, []);
 
-  // ─── Game Loop + Event Binding ─────────────────────────────
+  const start = useCallback(async () => {
+    await audioRef.current.ensureReady();
+    const next = startGame();
+    stateRef.current = next;
+    inputRef.current = { ...initialInput };
+    syncHud(next);
+  }, [syncHud]);
+
+  const restart = useCallback(async () => {
+    stateRef.current = createInitialState();
+    await start();
+  }, [start]);
+
   useEffect(() => {
-    const wrapper = wrapperRef.current;
-    const canvas = canvasRef.current;
-
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-    window.addEventListener('resize', resizeCanvas);
-
-    // Touch events on the ENTIRE game wrapper (not just canvas)
-    // This ensures touching anywhere on the screen controls the game
-    // and prevents page scroll/overscroll/pull-to-refresh.
-    if (wrapper) {
-      wrapper.addEventListener('touchstart', handleTouchStart, { passive: false });
-      wrapper.addEventListener('touchmove', handleTouchMove, { passive: false });
-      wrapper.addEventListener('touchend', handleTouchEnd, { passive: false });
-      wrapper.addEventListener('touchcancel', handleTouchEnd, { passive: false });
-    }
-
-    resizeCanvas();
-
-    const loop = (time: number) => {
-      stateRef.current = updateGame(stateRef.current, inputRef.current);
-
-      const s = stateRef.current;
-      setRevealPct(s.revealPercentage);
-      setLives(s.player.lives);
-      setPhase(s.phase);
-      setHasChaser(s.trailChaser !== null && s.trailChaser.active);
-
-      if (canvas) {
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          render(ctx, s, canvas.width, canvas.height, time);
+    const onKeyDown = (e: KeyboardEvent): void => {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D'].includes(e.key)) {
+        e.preventDefault();
+      }
+      switch (e.key) {
+        case 'ArrowUp': case 'w': case 'W': inputRef.current.up = true; break;
+        case 'ArrowDown': case 's': case 'S': inputRef.current.down = true; break;
+        case 'ArrowLeft': case 'a': case 'A': inputRef.current.left = true; break;
+        case 'ArrowRight': case 'd': case 'D': inputRef.current.right = true; break;
+        case ' ': if (stateRef.current.phase === 'start') void start(); break;
+        case 'p': case 'P': {
+          if (stateRef.current.phase === 'playing') stateRef.current = { ...stateRef.current, phase: 'paused' };
+          else if (stateRef.current.phase === 'paused') stateRef.current = { ...stateRef.current, phase: 'playing' };
+          syncHud(stateRef.current);
+          break;
         }
       }
-
-      animFrameRef.current = requestAnimationFrame(loop);
     };
 
-    animFrameRef.current = requestAnimationFrame(loop);
+    const onKeyUp = (e: KeyboardEvent): void => {
+      switch (e.key) {
+        case 'ArrowUp': case 'w': case 'W': inputRef.current.up = false; break;
+        case 'ArrowDown': case 's': case 'S': inputRef.current.down = false; break;
+        case 'ArrowLeft': case 'a': case 'A': inputRef.current.left = false; break;
+        case 'ArrowRight': case 'd': case 'D': inputRef.current.right = false; break;
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown, { passive: false });
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('resize', resize);
+    resize();
+
+    const loop = (now: number): void => {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      const dtMs = lastTimeRef.current ? now - lastTimeRef.current : 16;
+      lastTimeRef.current = now;
+
+      const result = stepGame(stateRef.current, inputRef.current, dtMs);
+      stateRef.current = result.state;
+      result.events.forEach((event) => audioRef.current.play(event));
+      syncHud(stateRef.current);
+
+      renderGame(ctx, stateRef.current, canvas.width, canvas.height, now);
+      frameRef.current = requestAnimationFrame(loop);
+    };
+
+    frameRef.current = requestAnimationFrame(loop);
 
     return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-      window.removeEventListener('resize', resizeCanvas);
-      if (wrapper) {
-        wrapper.removeEventListener('touchstart', handleTouchStart);
-        wrapper.removeEventListener('touchmove', handleTouchMove);
-        wrapper.removeEventListener('touchend', handleTouchEnd);
-        wrapper.removeEventListener('touchcancel', handleTouchEnd);
-      }
-      cancelAnimationFrame(animFrameRef.current);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('resize', resize);
+      cancelAnimationFrame(frameRef.current);
     };
-  }, [handleKeyDown, handleKeyUp, handleTouchStart, handleTouchMove, handleTouchEnd, resizeCanvas]);
+  }, [resize, start, syncHud]);
 
-  // ─── Render ─────────────────────────────────────────────────
+  const handlePointer = (clientX: number, clientY: number): void => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const cx = clientX - (rect.left + rect.width / 2);
+    const cy = clientY - (rect.top + rect.height / 2);
+    const deadZone = 16;
+
+    if (Math.hypot(cx, cy) < deadZone) {
+      inputRef.current.up = false;
+      inputRef.current.down = false;
+      inputRef.current.left = false;
+      inputRef.current.right = false;
+      return;
+    }
+
+    if (Math.abs(cx) > Math.abs(cy)) {
+      inputRef.current.left = cx < 0;
+      inputRef.current.right = cx > 0;
+      inputRef.current.up = false;
+      inputRef.current.down = false;
+    } else {
+      inputRef.current.up = cy < 0;
+      inputRef.current.down = cy > 0;
+      inputRef.current.left = false;
+      inputRef.current.right = false;
+    }
+  };
+
   return (
-    <div
-      ref={wrapperRef}
-      className="fixed inset-0 bg-[#050510] text-white flex flex-col overflow-hidden select-none"
-      style={{ touchAction: 'none', overscrollBehavior: 'none' }}
-    >
-
-      {/* ── Slim Top HUD ──────────────────────────────────────── */}
-      <div className="shrink-0 px-3 sm:px-5 py-1.5 sm:py-2 z-10">
-        <div className="flex items-center justify-between gap-3">
-          {/* Title + percentage */}
-          <div className="flex items-center gap-3 sm:gap-4">
-            <h1 className="text-sm sm:text-lg font-bold tracking-[0.2em] bg-gradient-to-r from-cyan-400 via-teal-300 to-cyan-500 bg-clip-text text-transparent leading-tight">
-              VOLTGRID
-            </h1>
-            <span className="text-cyan-300 font-bold text-sm sm:text-base tabular-nums font-mono">
-              {revealPct.toFixed(1)}%
-            </span>
+    <div className="fixed inset-0 bg-[#03040d] text-cyan-100 overflow-hidden select-none" style={{ touchAction: 'none', overscrollBehavior: 'none' }}>
+      <div className="absolute inset-0 flex flex-col">
+        <header className="h-14 md:h-16 px-4 md:px-6 flex items-center justify-between border-b border-cyan-400/15 bg-black/35 backdrop-blur-md z-20">
+          <div className="flex items-center gap-3">
+            <h1 className="text-sm md:text-base font-semibold tracking-[0.32em] text-cyan-300">VOLTGRID</h1>
+            <span className="text-xs md:text-sm text-cyan-200/70">{revealPct.toFixed(1)}%</span>
+            <span className="text-xs text-cyan-500/80">Target {TARGET_REVEAL_PERCENT}%</span>
           </div>
-
-          {/* Progress bar */}
-          <div className="flex-1 max-w-[200px] sm:max-w-xs h-1 sm:h-1.5 bg-cyan-950/30 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-gradient-to-r from-cyan-500 to-teal-400 rounded-full transition-all duration-200 shadow-[0_0_8px_rgba(0,255,204,0.4)]"
-              style={{ width: `${Math.min(100, (revealPct / WIN_PERCENTAGE) * 100)}%` }}
-            />
-          </div>
-
-          {/* Lives + restart */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            <div className="flex gap-1">
-              {Array.from({ length: INITIAL_LIVES }).map((_, i) => (
-                <div
-                  key={i}
-                  className={`w-2 h-2 sm:w-2.5 sm:h-2.5 rounded-full transition-all duration-300 ${
-                    i < lives
-                      ? 'bg-cyan-400 shadow-[0_0_6px_rgba(0,255,204,0.6)]'
-                      : 'bg-cyan-900/30'
-                  }`}
-                />
-              ))}
-            </div>
-            <button
-              onClick={restart}
-              className="text-[9px] sm:text-[10px] px-2 py-0.5 border border-cyan-800/30 rounded text-cyan-600/60 hover:text-cyan-300 hover:border-cyan-500/50 transition-colors uppercase tracking-wider"
-            >
+          <div className="flex items-center gap-2">
+            <span className="text-xs md:text-sm text-cyan-200/80">Lives {lives}</span>
+            <button className="px-3 py-1 text-xs rounded border border-cyan-400/40 hover:bg-cyan-500/20" onClick={() => void restart()}>
               Restart
             </button>
-          </div>
-        </div>
-
-        {/* Chaser warning */}
-        {hasChaser && (
-          <div className="text-center mt-0.5">
-            <span className="text-red-400/90 text-[10px] sm:text-xs tracking-wider uppercase animate-pulse font-bold">
-              Trail breached — reach the wall!
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* ── Canvas Area (fills all remaining space) ───────────── */}
-      <div className="flex-1 min-h-0 min-w-0 relative">
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 w-full h-full block"
-          style={{ touchAction: 'none' }}
-          tabIndex={0}
-        />
-
-        {/* Win Overlay */}
-        {phase === 'won' && (
-          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-20 animate-fadeIn">
-            <div className="relative">
-              <div className="absolute inset-0 blur-2xl bg-cyan-500/20 rounded-full" />
-              <div className="relative text-3xl sm:text-5xl font-bold tracking-wider bg-gradient-to-r from-cyan-300 via-teal-200 to-cyan-400 bg-clip-text text-transparent mb-3">
-                GRID CAPTURED
-              </div>
-            </div>
-            <div className="h-px w-24 sm:w-32 bg-gradient-to-r from-transparent via-cyan-500/40 to-transparent mb-3 sm:mb-4" />
-            <p className="text-cyan-300/70 text-xs sm:text-base mb-1 tracking-wide">
-              {revealPct.toFixed(1)}% territory secured
-            </p>
-            <p className="text-cyan-700/50 text-[10px] sm:text-sm mb-5 sm:mb-6 tracking-wide">
-              {lives} {lives === 1 ? 'life' : 'lives'} remaining
-            </p>
             <button
-              onClick={restart}
-              className="group relative px-6 sm:px-8 py-2 sm:py-3 rounded-lg text-cyan-300 uppercase tracking-[0.2em] text-[10px] sm:text-sm font-bold transition-all overflow-hidden"
+              className="px-3 py-1 text-xs rounded border border-cyan-400/40 hover:bg-cyan-500/20"
+              onClick={async () => {
+                await audioRef.current.ensureReady();
+                const next = !muted;
+                setMuted(next);
+                audioRef.current.setMuted(next);
+              }}
             >
-              <div className="absolute inset-0 bg-cyan-500/15 border border-cyan-500/40 rounded-lg group-hover:bg-cyan-500/25 group-hover:border-cyan-400/60 transition-all" />
-              <div className="absolute inset-0 shadow-[0_0_20px_rgba(0,255,204,0.15)] group-hover:shadow-[0_0_30px_rgba(0,255,204,0.25)] transition-all rounded-lg" />
-              <span className="relative">Play Again</span>
+              {muted ? 'Unmute' : 'Mute'}
             </button>
           </div>
-        )}
+        </header>
 
-        {/* Game Over Overlay */}
-        {phase === 'lost' && (
-          <div className="absolute inset-0 bg-black/75 backdrop-blur-sm flex flex-col items-center justify-center z-20 animate-fadeIn">
-            <div className="relative">
-              <div className="absolute inset-0 blur-2xl bg-red-500/15 rounded-full" />
-              <div className="relative text-3xl sm:text-5xl font-bold tracking-wider bg-gradient-to-r from-red-400 via-orange-300 to-red-500 bg-clip-text text-transparent mb-3">
-                OVERLOADED
+        <main className="relative flex-1 min-h-0">
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 w-full h-full"
+            onPointerDown={async (e) => {
+              e.preventDefault();
+              await audioRef.current.ensureReady();
+              if (stateRef.current.phase === 'start') {
+                await start();
+              }
+              pointerIdRef.current = e.pointerId;
+              inputRef.current.pointerActive = true;
+              handlePointer(e.clientX, e.clientY);
+            }}
+            onPointerMove={(e) => {
+              if (pointerIdRef.current !== e.pointerId) return;
+              e.preventDefault();
+              handlePointer(e.clientX, e.clientY);
+            }}
+            onPointerUp={(e) => {
+              if (pointerIdRef.current !== e.pointerId) return;
+              e.preventDefault();
+              pointerIdRef.current = null;
+              inputRef.current = { ...inputRef.current, up: false, down: false, left: false, right: false, pointerActive: false };
+            }}
+            onPointerCancel={() => {
+              pointerIdRef.current = null;
+              inputRef.current = { ...inputRef.current, up: false, down: false, left: false, right: false, pointerActive: false };
+            }}
+            onContextMenu={(e) => e.preventDefault()}
+          />
+
+          {(phase === 'start' || phase === 'won' || phase === 'lost' || phase === 'paused') && (
+            <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/65 backdrop-blur-sm px-4 text-center">
+              <div className="w-full max-w-md rounded-2xl border border-cyan-300/20 bg-slate-950/80 p-6 md:p-8 shadow-[0_0_50px_rgba(81,255,226,0.2)]">
+                <h2 className="text-2xl md:text-3xl font-bold text-cyan-200 mb-3 tracking-wide">
+                  {phase === 'start' && 'VoltGrid'}
+                  {phase === 'won' && 'Grid Secured'}
+                  {phase === 'lost' && 'System Overload'}
+                  {phase === 'paused' && 'Paused'}
+                </h2>
+                <p className="text-sm text-cyan-100/70 mb-6">{statusText}</p>
+                <div className="text-xs text-cyan-300/60 mb-6">Keyboard: Arrows / WASD • Touch: drag anywhere, release to stop.</div>
+                {phase === 'start' && (
+                  <button className="px-6 py-2 rounded-lg border border-cyan-300/50 hover:bg-cyan-500/20" onClick={() => void start()}>
+                    Start Mission
+                  </button>
+                )}
+                {(phase === 'won' || phase === 'lost') && (
+                  <button className="px-6 py-2 rounded-lg border border-cyan-300/50 hover:bg-cyan-500/20" onClick={() => void restart()}>
+                    Play Again
+                  </button>
+                )}
+                {phase === 'paused' && (
+                  <button
+                    className="px-6 py-2 rounded-lg border border-cyan-300/50 hover:bg-cyan-500/20"
+                    onClick={() => {
+                      stateRef.current = { ...stateRef.current, phase: 'playing' };
+                      syncHud(stateRef.current);
+                    }}
+                  >
+                    Resume
+                  </button>
+                )}
               </div>
             </div>
-            <div className="h-px w-24 sm:w-32 bg-gradient-to-r from-transparent via-red-500/30 to-transparent mb-3 sm:mb-4" />
-            <p className="text-red-300/70 text-xs sm:text-base mb-1 tracking-wide">
-              Grid breach at {revealPct.toFixed(1)}%
-            </p>
-            <p className="text-red-700/50 text-[10px] sm:text-sm mb-5 sm:mb-6 tracking-wide">
-              Target was {WIN_PERCENTAGE}%
-            </p>
-            <button
-              onClick={restart}
-              className="group relative px-6 sm:px-8 py-2 sm:py-3 rounded-lg text-red-300 uppercase tracking-[0.2em] text-[10px] sm:text-sm font-bold transition-all overflow-hidden"
-            >
-              <div className="absolute inset-0 bg-red-500/15 border border-red-500/40 rounded-lg group-hover:bg-red-500/25 group-hover:border-red-400/60 transition-all" />
-              <div className="absolute inset-0 shadow-[0_0_20px_rgba(255,80,80,0.15)] group-hover:shadow-[0_0_30px_rgba(255,80,80,0.25)] transition-all rounded-lg" />
-              <span className="relative">Try Again</span>
-            </button>
-          </div>
-        )}
-      </div>
+          )}
 
-      {/* ── Bottom: compact desktop hint only ────────────────── */}
-      {!isTouchDevice && (
-        <div className="shrink-0 px-3 sm:px-5 pb-1.5 sm:pb-2 pt-0.5">
-          <div className="flex items-center justify-center gap-4 text-cyan-800/40 text-[10px] sm:text-xs tracking-wide">
-            <span>
-              <kbd className="px-1 py-0.5 bg-cyan-950/20 border border-cyan-900/20 rounded text-[9px] text-cyan-600/50 font-mono">
-                Arrows
-              </kbd>
-              {' / '}
-              <kbd className="px-1 py-0.5 bg-cyan-950/20 border border-cyan-900/20 rounded text-[9px] text-cyan-600/50 font-mono">
-                WASD
-              </kbd>
-              {' to move'}
-            </span>
-            <span className="hidden sm:inline">Trail inward from border to capture</span>
+          <div className="absolute bottom-0 left-0 right-0 z-20 px-4 py-2 text-[11px] md:text-xs text-cyan-300/65 bg-gradient-to-t from-black/70 to-transparent">
+            {statusText}
           </div>
-        </div>
-      )}
+        </main>
+      </div>
     </div>
   );
 }
