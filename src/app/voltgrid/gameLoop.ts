@@ -279,7 +279,7 @@ export const stepGame = (prev: GameState, input: InputState, dtMs: number): Step
         y: clamp(state.player.pos.y + trailDir.y * PLAYER_TRAIL_SPEED * dt, BORDER_LINE, ARENA_HEIGHT - BORDER_LINE),
       };
 
-      if (!isCapturedCell(state.captured, next)) {
+      if (!isCapturedCell(state.captured, next) || isOnBorder(next)) {
         state.player.pos = next;
         addTrailPoint(state.player.trail, next);
       }
