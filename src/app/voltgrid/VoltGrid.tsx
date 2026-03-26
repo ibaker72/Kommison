@@ -42,7 +42,7 @@ export default function VoltGrid() {
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
-    const dpr = window.devicePixelRatio || 1;
+    const dpr = Math.min(2.5, window.devicePixelRatio || 1);
     canvas.width = Math.floor(rect.width * dpr);
     canvas.height = Math.floor(rect.height * dpr);
   }, []);
@@ -128,7 +128,7 @@ export default function VoltGrid() {
     const rect = canvas.getBoundingClientRect();
     const cx = clientX - (rect.left + rect.width / 2);
     const cy = clientY - (rect.top + rect.height / 2);
-    const deadZone = 16;
+    const deadZone = 14;
 
     if (Math.hypot(cx, cy) < deadZone) {
       inputRef.current.up = false;
@@ -155,15 +155,15 @@ export default function VoltGrid() {
     <div className="voltgrid-shell text-cyan-100 select-none" style={{ touchAction: 'none', overscrollBehavior: 'none' }}>
       <header className="voltgrid-hud z-20">
         <div className="flex items-center gap-2 md:gap-3">
-          <h1 className="text-[11px] md:text-xs font-semibold tracking-[0.28em] text-cyan-300">VOLTGRID</h1>
-          <span className="text-[11px] text-cyan-100/85">{revealPct.toFixed(1)}%</span>
-          <span className="text-[10px] text-cyan-300/70">Goal {TARGET_REVEAL_PERCENT}%</span>
+          <h1 className="text-[10px] md:text-[11px] font-semibold tracking-[0.34em] text-cyan-200">VOLTGRID</h1>
+          <span className="text-[10px] text-cyan-100/80">{revealPct.toFixed(1)}%</span>
+          <span className="text-[9px] text-cyan-300/70">Goal {TARGET_REVEAL_PERCENT}%</span>
         </div>
-        <div className="flex items-center gap-1 md:gap-2">
-          <span className="text-[11px] text-cyan-100/85">Lives {lives}</span>
-          <button className="px-2 py-1 text-[10px] rounded border border-cyan-400/40 hover:bg-cyan-500/20" onClick={() => void restart()}>Restart</button>
+        <div className="flex items-center gap-1.5 md:gap-2">
+          <span className="text-[10px] text-cyan-100/90">Lives {lives}</span>
+          <button className="voltgrid-btn" onClick={() => void restart()}>Restart</button>
           <button
-            className="px-2 py-1 text-[10px] rounded border border-cyan-400/40 hover:bg-cyan-500/20"
+            className="voltgrid-btn"
             onClick={async () => {
               await audioRef.current.ensureReady();
               const next = !muted;
@@ -176,7 +176,7 @@ export default function VoltGrid() {
         </div>
       </header>
 
-      <main className="relative flex-1 min-h-0">
+      <main className="relative flex-1 min-h-0 overflow-hidden">
         <canvas
           ref={canvasRef}
           className="absolute inset-0 h-full w-full"
@@ -207,8 +207,8 @@ export default function VoltGrid() {
         />
 
         {(phase === 'start' || phase === 'won' || phase === 'lost' || phase === 'paused') && (
-          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/65 backdrop-blur-sm px-4 text-center">
-            <div className="w-full max-w-md rounded-2xl border border-cyan-300/20 bg-slate-950/80 p-6 md:p-8 shadow-[0_0_50px_rgba(81,255,226,0.2)]">
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/56 backdrop-blur-[2px] px-4 text-center">
+            <div className="w-full max-w-md rounded-2xl border border-cyan-300/25 bg-slate-950/84 p-6 md:p-8 shadow-[0_0_40px_rgba(81,255,226,0.25)]">
               <h2 className="mb-3 text-2xl font-bold tracking-wide text-cyan-200 md:text-3xl">
                 {phase === 'start' && 'VoltGrid'}
                 {phase === 'won' && 'Grid Secured'}
@@ -235,7 +235,7 @@ export default function VoltGrid() {
         )}
       </main>
 
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/70 to-transparent px-3 pb-[calc(env(safe-area-inset-bottom)+0.4rem)] pt-5 text-[11px] text-cyan-200/70">
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/70 to-transparent px-3 pb-[calc(env(safe-area-inset-bottom)+0.32rem)] pt-4 text-[10px] text-cyan-100/72">
         {statusText}
       </div>
     </div>
