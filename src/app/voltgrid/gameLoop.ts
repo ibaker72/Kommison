@@ -17,15 +17,23 @@ import {
   TARGET_REVEAL_PERCENT,
   TRAIL_POINT_SPACING,
 } from './constants';
-import { applyCapture, bounceOrb, detectBorderEdge, isOnBorder, orbHitsTrail, snapToBorder } from './collision';
+import { applyCapture, bounceOrb, detectBorderEdge, isOnBorder, resolveOrbTrailCollision, snapToBorder } from './collision';
 import type { ArenaEdge, GameEvent, GameState, InputState, Particle, StepResult, Vec2 } from './types';
-import { clamp, distance, normalize, pointOnTrailByDistance, trailLength } from './utils';
+import { cellIndex, clamp, distance, pointOnTrailByDistance, trailLength, worldToCell } from './utils';
 
 const spawnPlayer = (): Vec2 => ({ x: ARENA_WIDTH * 0.5, y: BORDER_LINE });
 
 const randomOrbVelocity = (): Vec2 => {
   const angle = Math.random() * Math.PI * 2;
   return { x: Math.cos(angle) * ORB_SPEED, y: Math.sin(angle) * ORB_SPEED };
+};
+
+const axisFromInput = (input: InputState): Vec2 => {
+  const x = (input.right ? 1 : 0) - (input.left ? 1 : 0);
+  const y = (input.down ? 1 : 0) - (input.up ? 1 : 0);
+  if (x === 0 && y === 0) return { x: 0, y: 0 };
+  if (Math.abs(x) >= Math.abs(y)) return { x: Math.sign(x), y: 0 };
+  return { x: 0, y: Math.sign(y) };
 };
 
 export const createInitialState = (): GameState => {
@@ -39,6 +47,7 @@ export const createInitialState = (): GameState => {
       attachedEdge: 'top',
       motionState: 'border-attached',
       trail: [],
+      trailHeading: { x: 0, y: 0 },
       lives: INITIAL_LIVES,
       invulnMs: 0,
       heading: 0,
@@ -58,19 +67,9 @@ export const createInitialState = (): GameState => {
   };
 };
 
-const directionFromInput = (input: InputState): Vec2 => {
-  const x = (input.right ? 1 : 0) - (input.left ? 1 : 0);
-  const y = (input.down ? 1 : 0) - (input.up ? 1 : 0);
-  return normalize({ x, y });
-};
-
 const getTangentAxis = (edge: ArenaEdge, dir: Vec2): Vec2 => {
-  if (edge === 'top' || edge === 'bottom') {
-    if (dir.x === 0) return { x: 0, y: 0 };
-    return { x: Math.sign(dir.x), y: 0 };
-  }
-  if (dir.y === 0) return { x: 0, y: 0 };
-  return { x: 0, y: Math.sign(dir.y) };
+  if (edge === 'top' || edge === 'bottom') return { x: dir.x === 0 ? 0 : Math.sign(dir.x), y: 0 };
+  return { x: 0, y: dir.y === 0 ? 0 : Math.sign(dir.y) };
 };
 
 const getInwardDirection = (edge: ArenaEdge): Vec2 => {
@@ -82,7 +81,7 @@ const getInwardDirection = (edge: ArenaEdge): Vec2 => {
 
 const hasInwardIntent = (edge: ArenaEdge, dir: Vec2): boolean => {
   const inward = getInwardDirection(edge);
-  return inward.x * dir.x + inward.y * dir.y > 0.25;
+  return inward.x * dir.x + inward.y * dir.y > 0;
 };
 
 const addTrailPoint = (trail: Vec2[], point: Vec2): void => {
@@ -120,6 +119,7 @@ const loseLife = (state: GameState): GameState => {
       pos: spawnPlayer(),
       vel: { x: 0, y: 0 },
       trail: [],
+      trailHeading: { x: 0, y: 0 },
       onBorder: true,
       attachedEdge: 'top',
       motionState: 'respawning',
@@ -131,6 +131,18 @@ const loseLife = (state: GameState): GameState => {
   };
 };
 
+const isCapturedCell = (captured: Uint8Array, p: Vec2): boolean => {
+  const c = worldToCell(p);
+  return captured[cellIndex(c.x, c.y)] === 1;
+};
+
+const resolveTrailDirection = (inputDir: Vec2, previous: Vec2): Vec2 => {
+  if (inputDir.x === 0 && inputDir.y === 0) return previous;
+  if (previous.x === 0 && previous.y === 0) return inputDir;
+  const isReverse = inputDir.x === -previous.x && inputDir.y === -previous.y;
+  return isReverse ? previous : inputDir;
+};
+
 export const startGame = (): GameState => ({ ...createInitialState(), phase: 'playing' });
 
 export const stepGame = (prev: GameState, input: InputState, dtMs: number): StepResult => {
@@ -140,11 +152,11 @@ export const stepGame = (prev: GameState, input: InputState, dtMs: number): Step
 
   const events: GameEvent[] = [];
   const dt = Math.min(0.032, dtMs / 1000);
-  const dir = directionFromInput(input);
+  const inputDir = axisFromInput(input);
 
   let state: GameState = {
     ...prev,
-    player: { ...prev.player, trail: [...prev.player.trail] },
+    player: { ...prev.player, trail: [...prev.player.trail], trailHeading: { ...prev.player.trailHeading } },
     orb: { ...prev.orb, pos: { ...prev.orb.pos }, vel: { ...prev.orb.vel } },
     particles: [...prev.particles],
     shakeMs: Math.max(0, prev.shakeMs - dtMs),
@@ -155,28 +167,33 @@ export const stepGame = (prev: GameState, input: InputState, dtMs: number): Step
     state.player.motionState = 'border-attached';
   }
 
-  if (dir.x !== 0 || dir.y !== 0) {
-    state.player.heading = Math.atan2(dir.y, dir.x);
+  if (inputDir.x !== 0 || inputDir.y !== 0) {
+    state.player.heading = Math.atan2(inputDir.y, inputDir.x);
+
     if (state.player.onBorder) {
       const currentEdge = state.player.attachedEdge ?? detectBorderEdge(state.player.pos);
       const snapped = snapToBorder(state.player.pos);
       state.player.pos = snapped;
       state.player.attachedEdge = detectBorderEdge(snapped);
 
-      if (hasInwardIntent(currentEdge, dir)) {
+      if (hasInwardIntent(currentEdge, inputDir)) {
         const inward = getInwardDirection(currentEdge);
         const moveDistance = PLAYER_TRAIL_SPEED * dt + DETACH_PUSH_DISTANCE;
         const detachedPos = {
           x: clamp(snapped.x + inward.x * moveDistance, BORDER_LINE + DETACH_PUSH_DISTANCE, ARENA_WIDTH - BORDER_LINE - DETACH_PUSH_DISTANCE),
           y: clamp(snapped.y + inward.y * moveDistance, BORDER_LINE + DETACH_PUSH_DISTANCE, ARENA_HEIGHT - BORDER_LINE - DETACH_PUSH_DISTANCE),
         };
-        state.player.onBorder = false;
-        state.player.motionState = 'trail-active';
-        state.player.trail = [snapped];
-        state.player.pos = detachedPos;
-        addTrailPoint(state.player.trail, detachedPos);
+
+        if (!isCapturedCell(state.captured, detachedPos)) {
+          state.player.onBorder = false;
+          state.player.motionState = 'trail-active';
+          state.player.trailHeading = inward;
+          state.player.trail = [snapped];
+          state.player.pos = detachedPos;
+          addTrailPoint(state.player.trail, detachedPos);
+        }
       } else {
-        const tangent = getTangentAxis(currentEdge, dir);
+        const tangent = getTangentAxis(currentEdge, inputDir);
         if (tangent.x !== 0 || tangent.y !== 0) {
           const next = {
             x: clamp(snapped.x + tangent.x * PLAYER_BORDER_SPEED * dt, BORDER_LINE, ARENA_WIDTH - BORDER_LINE),
@@ -188,23 +205,28 @@ export const stepGame = (prev: GameState, input: InputState, dtMs: number): Step
         }
       }
     } else {
+      const trailDir = resolveTrailDirection(inputDir, state.player.trailHeading);
+      state.player.trailHeading = trailDir;
+
       const next = {
-        x: clamp(state.player.pos.x + dir.x * PLAYER_TRAIL_SPEED * dt, BORDER_LINE, ARENA_WIDTH - BORDER_LINE),
-        y: clamp(state.player.pos.y + dir.y * PLAYER_TRAIL_SPEED * dt, BORDER_LINE, ARENA_HEIGHT - BORDER_LINE),
+        x: clamp(state.player.pos.x + trailDir.x * PLAYER_TRAIL_SPEED * dt, BORDER_LINE, ARENA_WIDTH - BORDER_LINE),
+        y: clamp(state.player.pos.y + trailDir.y * PLAYER_TRAIL_SPEED * dt, BORDER_LINE, ARENA_HEIGHT - BORDER_LINE),
       };
-      state.player.pos = next;
-      addTrailPoint(state.player.trail, next);
-      if (isOnBorder(next)) {
-        const snapped = snapToBorder(next);
+
+      if (!isCapturedCell(state.captured, next)) {
+        state.player.pos = next;
+        addTrailPoint(state.player.trail, next);
+      }
+
+      if (isOnBorder(state.player.pos)) {
+        const snapped = snapToBorder(state.player.pos);
         addTrailPoint(state.player.trail, snapped);
         state.player.motionState = 'capture-resolve';
         state.player.pos = snapped;
         state.player.attachedEdge = detectBorderEdge(snapped);
         state.player.onBorder = true;
 
-        if (state.chaser?.active) {
-          events.push('safe-reconnect');
-        }
+        if (state.chaser?.active) events.push('safe-reconnect');
 
         const capture = applyCapture(state.captured, state.player.trail, state.orb.pos);
         if (capture.capturedDelta > 0) {
@@ -221,6 +243,7 @@ export const stepGame = (prev: GameState, input: InputState, dtMs: number): Step
         }
 
         state.player.trail = [];
+        state.player.trailHeading = { x: 0, y: 0 };
         state.player.motionState = state.player.invulnMs > 0 ? 'respawning' : 'border-attached';
         state.chaser = null;
       }
@@ -229,36 +252,36 @@ export const stepGame = (prev: GameState, input: InputState, dtMs: number): Step
 
   bounceOrb(state.orb, state.captured, dt);
 
+  if (state.phase === 'playing' && state.player.trail.length > 1) {
+    const hit = resolveOrbTrailCollision(state.orb, state.player.trail);
+    if (hit && !state.chaser) {
+      const initialDist = trailLength(state.player.trail.slice(0, hit.segmentIndex + 1));
+      state.chaser = {
+        distanceAlong: initialDist,
+        pathLength: trailLength(state.player.trail),
+        pos: pointOnTrailByDistance(state.player.trail, initialDist),
+        active: true,
+      };
+      state.particles.push(...spawnParticles(state.chaser.pos, 'rgba(255,105,127,1)', 12));
+      state.shakeMs = SHAKE_MS;
+      events.push('trail-infected');
+    }
+  }
+
   if (state.player.invulnMs <= 0 && distance(state.orb.pos, state.player.pos) <= state.orb.radius + PLAYER_HIT_RADIUS) {
     state = loseLife(state);
     events.push('death-hit');
     if (state.phase === 'lost') events.push('game-over');
   }
 
-  if (state.phase === 'playing' && state.player.trail.length > 1) {
-    if (!state.chaser) {
-      const segment = orbHitsTrail(state.orb, state.player.trail);
-      if (segment >= 0) {
-        const initialDist = trailLength(state.player.trail.slice(0, segment + 1));
-        state.chaser = {
-          distanceAlong: initialDist,
-          pathLength: trailLength(state.player.trail),
-          pos: pointOnTrailByDistance(state.player.trail, initialDist),
-          active: true,
-        };
-        state.particles.push(...spawnParticles(state.chaser.pos, 'rgba(255,105,127,1)', 12));
-        state.shakeMs = SHAKE_MS;
-        events.push('trail-infected');
-      }
-    } else if (state.chaser.active) {
-      state.chaser.pathLength = trailLength(state.player.trail);
-      state.chaser.distanceAlong += CHASER_SPEED * dt;
-      state.chaser.pos = pointOnTrailByDistance(state.player.trail, state.chaser.distanceAlong);
-      if (state.chaser.distanceAlong >= state.chaser.pathLength - 2) {
-        state = loseLife(state);
-        events.push('death-hit');
-        if (state.phase === 'lost') events.push('game-over');
-      }
+  if (state.phase === 'playing' && state.chaser?.active) {
+    state.chaser.pathLength = trailLength(state.player.trail);
+    state.chaser.distanceAlong += CHASER_SPEED * dt;
+    state.chaser.pos = pointOnTrailByDistance(state.player.trail, state.chaser.distanceAlong);
+    if (state.chaser.distanceAlong >= state.chaser.pathLength - 2) {
+      state = loseLife(state);
+      events.push('death-hit');
+      if (state.phase === 'lost') events.push('game-over');
     }
   }
 
@@ -271,7 +294,9 @@ export const stepGame = (prev: GameState, input: InputState, dtMs: number): Step
     .filter((particle) => particle.lifeMs > 0);
 
   if (state.phase === 'playing') {
-    state.statusText = state.chaser ? 'Trail compromised! Reconnect before spark reaches you.' : 'Carve corridors and trap empty sectors.';
+    state.statusText = state.chaser
+      ? 'Trail compromised! Reconnect before spark reaches you.'
+      : 'Claimed zones are safe. Keep shrinking the live orb sector.';
   }
 
   return { state, events };

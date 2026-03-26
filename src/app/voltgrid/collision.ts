@@ -9,8 +9,8 @@ import {
   GRID_ROWS,
   TRAIL_HIT_WIDTH,
 } from './constants';
-import type { ArenaEdge, Orb, Vec2 } from './types';
-import { cellIndex, pointToSegmentDistance, worldToCell } from './utils';
+import type { ArenaEdge, Orb, TrailCollision, Vec2 } from './types';
+import { cellIndex, distance, nearestPointOnSegment, normalize, reflect, worldToCell } from './utils';
 
 export const isOnBorder = (p: Vec2): boolean =>
   p.x <= BORDER_LINE + BORDER_REATTACH_EPSILON ||
@@ -49,14 +49,40 @@ export const snapToBorder = (p: Vec2): Vec2 => {
   return { x: ARENA_WIDTH - BORDER_LINE, y: p.y };
 };
 
-export const orbHitsTrail = (orb: Orb, trail: Vec2[]): number => {
+export const resolveOrbTrailCollision = (orb: Orb, trail: Vec2[]): TrailCollision | null => {
+  if (trail.length < 2) return null;
+
+  const hitDistance = orb.radius + TRAIL_HIT_WIDTH;
+  let best: TrailCollision | null = null;
+
   for (let i = 1; i < trail.length; i++) {
-    const d = pointToSegmentDistance(orb.pos, trail[i - 1], trail[i]);
-    if (d <= orb.radius + TRAIL_HIT_WIDTH) {
-      return i - 1;
+    const a = trail[i - 1];
+    const b = trail[i];
+    const nearest = nearestPointOnSegment(orb.pos, a, b);
+    const d = distance(orb.pos, nearest.point);
+    if (d > hitDistance) continue;
+
+    let normal = normalize({ x: orb.pos.x - nearest.point.x, y: orb.pos.y - nearest.point.y });
+    if (Math.abs(normal.x) < 0.001 && Math.abs(normal.y) < 0.001) {
+      const seg = normalize({ x: b.x - a.x, y: b.y - a.y });
+      normal = Math.abs(seg.x) > Math.abs(seg.y) ? { x: 0, y: orb.vel.y >= 0 ? -1 : 1 } : { x: orb.vel.x >= 0 ? -1 : 1, y: 0 };
+    }
+
+    if (!best || d < distance(orb.pos, best.point)) {
+      best = { segmentIndex: i - 1, point: nearest.point, normal };
     }
   }
-  return -1;
+
+  if (!best) return null;
+
+  orb.vel = reflect(orb.vel, best.normal);
+  const pushOut = hitDistance + 0.5;
+  orb.pos = {
+    x: best.point.x + best.normal.x * pushOut,
+    y: best.point.y + best.normal.y * pushOut,
+  };
+
+  return best;
 };
 
 export const buildTrailBlockMask = (trail: Vec2[]): Uint8Array => {
@@ -134,21 +160,47 @@ export const applyCapture = (captured: Uint8Array, trail: Vec2[], orbPos: Vec2):
   return { next, capturedDelta };
 };
 
+const collidesCaptured = (captured: Uint8Array, x: number, y: number): boolean => {
+  const c = worldToCell({ x, y });
+  return captured[cellIndex(c.x, c.y)] === 1;
+};
+
 export const bounceOrb = (orb: Orb, captured: Uint8Array, dt: number): void => {
-  const nextX = orb.pos.x + orb.vel.x * dt;
-  const nextY = orb.pos.y + orb.vel.y * dt;
+  let nextX = orb.pos.x + orb.vel.x * dt;
+  let nextY = orb.pos.y + orb.vel.y * dt;
 
-  const wouldHitBoundsX = nextX - orb.radius <= BORDER_THICKNESS || nextX + orb.radius >= ARENA_WIDTH - BORDER_THICKNESS;
-  const wouldHitBoundsY = nextY - orb.radius <= BORDER_THICKNESS || nextY + orb.radius >= ARENA_HEIGHT - BORDER_THICKNESS;
+  if (nextX - orb.radius <= BORDER_THICKNESS) {
+    nextX = BORDER_THICKNESS + orb.radius;
+    orb.vel.x = Math.abs(orb.vel.x);
+  } else if (nextX + orb.radius >= ARENA_WIDTH - BORDER_THICKNESS) {
+    nextX = ARENA_WIDTH - BORDER_THICKNESS - orb.radius;
+    orb.vel.x = -Math.abs(orb.vel.x);
+  }
 
-  if (wouldHitBoundsX) orb.vel.x *= -1;
-  if (wouldHitBoundsY) orb.vel.y *= -1;
+  if (nextY - orb.radius <= BORDER_THICKNESS) {
+    nextY = BORDER_THICKNESS + orb.radius;
+    orb.vel.y = Math.abs(orb.vel.y);
+  } else if (nextY + orb.radius >= ARENA_HEIGHT - BORDER_THICKNESS) {
+    nextY = ARENA_HEIGHT - BORDER_THICKNESS - orb.radius;
+    orb.vel.y = -Math.abs(orb.vel.y);
+  }
 
-  const cx = worldToCell({ x: nextX, y: orb.pos.y });
-  const cy = worldToCell({ x: orb.pos.x, y: nextY });
-  if (captured[cellIndex(cx.x, cx.y)]) orb.vel.x *= -1;
-  if (captured[cellIndex(cy.x, cy.y)]) orb.vel.y *= -1;
+  if (collidesCaptured(captured, nextX, orb.pos.y)) {
+    orb.vel.x *= -1;
+    nextX = orb.pos.x + orb.vel.x * dt;
+  }
+  if (collidesCaptured(captured, orb.pos.x, nextY)) {
+    orb.vel.y *= -1;
+    nextY = orb.pos.y + orb.vel.y * dt;
+  }
 
-  orb.pos.x += orb.vel.x * dt;
-  orb.pos.y += orb.vel.y * dt;
+  if (collidesCaptured(captured, nextX, nextY)) {
+    orb.vel.x *= -1;
+    orb.vel.y *= -1;
+    nextX = orb.pos.x + orb.vel.x * dt;
+    nextY = orb.pos.y + orb.vel.y * dt;
+  }
+
+  orb.pos.x = nextX;
+  orb.pos.y = nextY;
 };

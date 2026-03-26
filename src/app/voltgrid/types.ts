@@ -15,6 +15,7 @@ export interface Player {
   attachedEdge: ArenaEdge;
   motionState: PlayerMotionState;
   trail: Vec2[];
+  trailHeading: Vec2;
   lives: number;
   invulnMs: number;
   heading: number;
@@ -74,4 +75,10 @@ export type GameEvent =
 export interface StepResult {
   state: GameState;
   events: GameEvent[];
+}
+
+export interface TrailCollision {
+  segmentIndex: number;
+  point: Vec2;
+  normal: Vec2;
 }

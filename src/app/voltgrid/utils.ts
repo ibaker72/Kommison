@@ -12,6 +12,8 @@ export const normalize = (v: Vec2): Vec2 => {
 
 export const distance = (a: Vec2, b: Vec2): number => Math.hypot(a.x - b.x, a.y - b.y);
 
+export const dot = (a: Vec2, b: Vec2): number => a.x * b.x + a.y * b.y;
+
 export const lerp = (a: number, b: number, t: number): number => a + (b - a) * t;
 
 export const cellIndex = (x: number, y: number): number => y * GRID_COLS + x;
@@ -26,14 +28,27 @@ export const cellCenter = (x: number, y: number): Vec2 => ({
   y: y * GRID_CELL_SIZE + GRID_CELL_SIZE / 2,
 });
 
-export const pointToSegmentDistance = (p: Vec2, a: Vec2, b: Vec2): number => {
+export const nearestPointOnSegment = (p: Vec2, a: Vec2, b: Vec2): { point: Vec2; t: number } => {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const lenSq = dx * dx + dy * dy;
-  if (lenSq === 0) return distance(p, a);
+  if (lenSq === 0) return { point: { ...a }, t: 0 };
   const t = clamp(((p.x - a.x) * dx + (p.y - a.y) * dy) / lenSq, 0, 1);
-  const proj = { x: a.x + t * dx, y: a.y + t * dy };
-  return distance(p, proj);
+  return {
+    point: { x: a.x + t * dx, y: a.y + t * dy },
+    t,
+  };
+};
+
+export const pointToSegmentDistance = (p: Vec2, a: Vec2, b: Vec2): number => distance(p, nearestPointOnSegment(p, a, b).point);
+
+export const reflect = (velocity: Vec2, normal: Vec2): Vec2 => {
+  const n = normalize(normal);
+  const projection = dot(velocity, n);
+  return {
+    x: velocity.x - 2 * projection * n.x,
+    y: velocity.y - 2 * projection * n.y,
+  };
 };
 
 export const trailLength = (trail: Vec2[]): number => {

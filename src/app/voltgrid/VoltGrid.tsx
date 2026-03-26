@@ -62,9 +62,7 @@ export default function VoltGrid() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
-      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D'].includes(e.key)) {
-        e.preventDefault();
-      }
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd', 'W', 'A', 'S', 'D'].includes(e.key)) e.preventDefault();
       switch (e.key) {
         case 'ArrowUp': case 'w': case 'W': inputRef.current.up = true; break;
         case 'ArrowDown': case 's': case 'S': inputRef.current.down = true; break;
@@ -93,7 +91,6 @@ export default function VoltGrid() {
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('resize', resize);
     window.visualViewport?.addEventListener('resize', resize);
-    window.visualViewport?.addEventListener('scroll', resize);
     resize();
 
     const loop = (now: number): void => {
@@ -121,7 +118,6 @@ export default function VoltGrid() {
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('resize', resize);
       window.visualViewport?.removeEventListener('resize', resize);
-      window.visualViewport?.removeEventListener('scroll', resize);
       cancelAnimationFrame(frameRef.current);
     };
   }, [resize, start, syncHud]);
@@ -156,105 +152,91 @@ export default function VoltGrid() {
   };
 
   return (
-    <div className="voltgrid-shell bg-[#03040d] text-cyan-100 overflow-hidden select-none" style={{ touchAction: 'none', overscrollBehavior: 'none' }}>
-      <div className="absolute inset-0 flex flex-col">
-        <header className="h-12 md:h-14 px-3 md:px-6 flex items-center justify-between border-b border-cyan-400/15 bg-black/35 backdrop-blur-md z-20 voltgrid-safe-top">
-          <div className="flex items-center gap-3">
-            <h1 className="text-sm md:text-base font-semibold tracking-[0.32em] text-cyan-300">VOLTGRID</h1>
-            <span className="text-xs md:text-sm text-cyan-200/70">{revealPct.toFixed(1)}%</span>
-            <span className="text-xs text-cyan-500/80">Target {TARGET_REVEAL_PERCENT}%</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs md:text-sm text-cyan-200/80">Lives {lives}</span>
-            <button className="px-3 py-1 text-xs rounded border border-cyan-400/40 hover:bg-cyan-500/20" onClick={() => void restart()}>
-              Restart
-            </button>
-            <button
-              className="px-3 py-1 text-xs rounded border border-cyan-400/40 hover:bg-cyan-500/20"
-              onClick={async () => {
-                await audioRef.current.ensureReady();
-                const next = !muted;
-                setMuted(next);
-                audioRef.current.setMuted(next);
-              }}
-            >
-              {muted ? 'Unmute' : 'Mute'}
-            </button>
-          </div>
-        </header>
-
-        <main className="relative flex-1 min-h-0">
-          <canvas
-            ref={canvasRef}
-            className="absolute inset-0 w-full h-full"
-            onPointerDown={async (e) => {
-              e.preventDefault();
+    <div className="voltgrid-shell text-cyan-100 select-none" style={{ touchAction: 'none', overscrollBehavior: 'none' }}>
+      <header className="voltgrid-hud z-20">
+        <div className="flex items-center gap-2 md:gap-3">
+          <h1 className="text-[11px] md:text-xs font-semibold tracking-[0.28em] text-cyan-300">VOLTGRID</h1>
+          <span className="text-[11px] text-cyan-100/85">{revealPct.toFixed(1)}%</span>
+          <span className="text-[10px] text-cyan-300/70">Goal {TARGET_REVEAL_PERCENT}%</span>
+        </div>
+        <div className="flex items-center gap-1 md:gap-2">
+          <span className="text-[11px] text-cyan-100/85">Lives {lives}</span>
+          <button className="px-2 py-1 text-[10px] rounded border border-cyan-400/40 hover:bg-cyan-500/20" onClick={() => void restart()}>Restart</button>
+          <button
+            className="px-2 py-1 text-[10px] rounded border border-cyan-400/40 hover:bg-cyan-500/20"
+            onClick={async () => {
               await audioRef.current.ensureReady();
-              if (stateRef.current.phase === 'start') {
-                await start();
-              }
-              pointerIdRef.current = e.pointerId;
-              inputRef.current.pointerActive = true;
-              handlePointer(e.clientX, e.clientY);
+              const next = !muted;
+              setMuted(next);
+              audioRef.current.setMuted(next);
             }}
-            onPointerMove={(e) => {
-              if (pointerIdRef.current !== e.pointerId) return;
-              e.preventDefault();
-              handlePointer(e.clientX, e.clientY);
-            }}
-            onPointerUp={(e) => {
-              if (pointerIdRef.current !== e.pointerId) return;
-              e.preventDefault();
-              pointerIdRef.current = null;
-              inputRef.current = { ...inputRef.current, up: false, down: false, left: false, right: false, pointerActive: false };
-            }}
-            onPointerCancel={() => {
-              pointerIdRef.current = null;
-              inputRef.current = { ...inputRef.current, up: false, down: false, left: false, right: false, pointerActive: false };
-            }}
-            onContextMenu={(e) => e.preventDefault()}
-          />
+          >
+            {muted ? 'Unmute' : 'Mute'}
+          </button>
+        </div>
+      </header>
 
-          {(phase === 'start' || phase === 'won' || phase === 'lost' || phase === 'paused') && (
-            <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/65 backdrop-blur-sm px-4 text-center">
-              <div className="w-full max-w-md rounded-2xl border border-cyan-300/20 bg-slate-950/80 p-6 md:p-8 shadow-[0_0_50px_rgba(81,255,226,0.2)]">
-                <h2 className="text-2xl md:text-3xl font-bold text-cyan-200 mb-3 tracking-wide">
-                  {phase === 'start' && 'VoltGrid'}
-                  {phase === 'won' && 'Grid Secured'}
-                  {phase === 'lost' && 'System Overload'}
-                  {phase === 'paused' && 'Paused'}
-                </h2>
-                <p className="text-sm text-cyan-100/70 mb-6">{statusText}</p>
-                <div className="text-xs text-cyan-300/60 mb-6">Keyboard: Arrows / WASD • Touch: drag anywhere, release to stop.</div>
-                {phase === 'start' && (
-                  <button className="px-6 py-2 rounded-lg border border-cyan-300/50 hover:bg-cyan-500/20" onClick={() => void start()}>
-                    Start Mission
-                  </button>
-                )}
-                {(phase === 'won' || phase === 'lost') && (
-                  <button className="px-6 py-2 rounded-lg border border-cyan-300/50 hover:bg-cyan-500/20" onClick={() => void restart()}>
-                    Play Again
-                  </button>
-                )}
-                {phase === 'paused' && (
-                  <button
-                    className="px-6 py-2 rounded-lg border border-cyan-300/50 hover:bg-cyan-500/20"
-                    onClick={() => {
-                      stateRef.current = { ...stateRef.current, phase: 'playing' };
-                      syncHud(stateRef.current);
-                    }}
-                  >
-                    Resume
-                  </button>
-                )}
-              </div>
+      <main className="relative flex-1 min-h-0">
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 h-full w-full"
+          onPointerDown={async (e) => {
+            e.preventDefault();
+            await audioRef.current.ensureReady();
+            if (stateRef.current.phase === 'start') await start();
+            pointerIdRef.current = e.pointerId;
+            inputRef.current.pointerActive = true;
+            handlePointer(e.clientX, e.clientY);
+          }}
+          onPointerMove={(e) => {
+            if (pointerIdRef.current !== e.pointerId) return;
+            e.preventDefault();
+            handlePointer(e.clientX, e.clientY);
+          }}
+          onPointerUp={(e) => {
+            if (pointerIdRef.current !== e.pointerId) return;
+            e.preventDefault();
+            pointerIdRef.current = null;
+            inputRef.current = { ...inputRef.current, up: false, down: false, left: false, right: false, pointerActive: false };
+          }}
+          onPointerCancel={() => {
+            pointerIdRef.current = null;
+            inputRef.current = { ...inputRef.current, up: false, down: false, left: false, right: false, pointerActive: false };
+          }}
+          onContextMenu={(e) => e.preventDefault()}
+        />
+
+        {(phase === 'start' || phase === 'won' || phase === 'lost' || phase === 'paused') && (
+          <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/65 backdrop-blur-sm px-4 text-center">
+            <div className="w-full max-w-md rounded-2xl border border-cyan-300/20 bg-slate-950/80 p-6 md:p-8 shadow-[0_0_50px_rgba(81,255,226,0.2)]">
+              <h2 className="mb-3 text-2xl font-bold tracking-wide text-cyan-200 md:text-3xl">
+                {phase === 'start' && 'VoltGrid'}
+                {phase === 'won' && 'Grid Secured'}
+                {phase === 'lost' && 'System Overload'}
+                {phase === 'paused' && 'Paused'}
+              </h2>
+              <p className="mb-6 text-sm text-cyan-100/70">{statusText}</p>
+              <div className="mb-6 text-xs text-cyan-300/60">Keyboard: Arrows / WASD • Touch: drag anywhere, release to stop.</div>
+              {phase === 'start' && <button className="rounded-lg border border-cyan-300/50 px-6 py-2 hover:bg-cyan-500/20" onClick={() => void start()}>Start Mission</button>}
+              {(phase === 'won' || phase === 'lost') && <button className="rounded-lg border border-cyan-300/50 px-6 py-2 hover:bg-cyan-500/20" onClick={() => void restart()}>Play Again</button>}
+              {phase === 'paused' && (
+                <button
+                  className="rounded-lg border border-cyan-300/50 px-6 py-2 hover:bg-cyan-500/20"
+                  onClick={() => {
+                    stateRef.current = { ...stateRef.current, phase: 'playing' };
+                    syncHud(stateRef.current);
+                  }}
+                >
+                  Resume
+                </button>
+              )}
             </div>
-          )}
-
-          <div className="absolute bottom-0 left-0 right-0 z-20 px-4 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] text-[11px] md:text-xs text-cyan-300/65 bg-gradient-to-t from-black/70 to-transparent">
-            {statusText}
           </div>
-        </main>
+        )}
+      </main>
+
+      <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/70 to-transparent px-3 pb-[calc(env(safe-area-inset-bottom)+0.4rem)] pt-5 text-[11px] text-cyan-200/70">
+        {statusText}
       </div>
     </div>
   );

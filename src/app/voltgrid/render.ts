@@ -18,23 +18,24 @@ export const renderGame = (
   canvasHeight: number,
   time: number,
 ): void => {
-  const dprScale = Math.min(canvasWidth / ARENA_WIDTH, canvasHeight / ARENA_HEIGHT);
-  const ox = (canvasWidth - ARENA_WIDTH * dprScale) / 2;
-  const oy = (canvasHeight - ARENA_HEIGHT * dprScale) / 2;
+  const scale = Math.min(canvasWidth / ARENA_WIDTH, canvasHeight / ARENA_HEIGHT);
+  const viewWidth = ARENA_WIDTH * scale;
+  const viewHeight = ARENA_HEIGHT * scale;
+  const ox = (canvasWidth - viewWidth) / 2;
+  const oy = (canvasHeight - viewHeight) / 2;
 
   ctx.save();
-  ctx.fillStyle = PALETTE.pageBg;
-  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+  drawFullscreenBackdrop(ctx, canvasWidth, canvasHeight, time);
 
   const shake = state.shakeMs > 0 ? (state.shakeMs / 220) * 3 : 0;
   const sx = (Math.random() - 0.5) * shake;
   const sy = (Math.random() - 0.5) * shake;
 
   ctx.translate(ox + sx, oy + sy);
-  ctx.scale(dprScale, dprScale);
+  ctx.scale(scale, scale);
 
   drawArena(ctx, time);
-  drawCaptured(ctx, state.captured);
+  drawCaptured(ctx, state.captured, time);
   drawTrail(ctx, state, time);
   drawOrb(ctx, state, time);
   drawChaser(ctx, state, time);
@@ -44,16 +45,36 @@ export const renderGame = (
   ctx.restore();
 };
 
+const drawFullscreenBackdrop = (ctx: CanvasRenderingContext2D, width: number, height: number, time: number): void => {
+  const g = ctx.createRadialGradient(width * 0.4, height * 0.5, 40, width * 0.5, height * 0.5, Math.max(width, height));
+  g.addColorStop(0, '#0a1331');
+  g.addColorStop(0.45, '#060a1b');
+  g.addColorStop(1, PALETTE.pageBg);
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.strokeStyle = 'rgba(56, 205, 255, 0.08)';
+  ctx.lineWidth = 1;
+  const spacing = Math.max(28, Math.min(width, height) * 0.06);
+  const drift = (time * 0.02) % spacing;
+  for (let y = -spacing + drift; y < height; y += spacing) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
+  }
+};
+
 const drawArena = (ctx: CanvasRenderingContext2D, time: number): void => {
   const g = ctx.createLinearGradient(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
-  g.addColorStop(0, '#090d22');
-  g.addColorStop(1, '#09112d');
+  g.addColorStop(0, '#0a1128');
+  g.addColorStop(1, '#0b1637');
   ctx.fillStyle = g;
   ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
 
   ctx.strokeStyle = PALETTE.grid;
   ctx.lineWidth = 1;
-  ctx.globalAlpha = 0.5 + Math.sin(time * 0.0015) * 0.1;
+  ctx.globalAlpha = 0.45 + Math.sin(time * 0.0012) * 0.1;
   for (let x = GRID_CELL_SIZE; x < ARENA_WIDTH; x += GRID_CELL_SIZE * 5) {
     ctx.beginPath();
     ctx.moveTo(x, BORDER_THICKNESS);
@@ -76,12 +97,20 @@ const drawArena = (ctx: CanvasRenderingContext2D, time: number): void => {
   ctx.shadowBlur = 0;
 };
 
-const drawCaptured = (ctx: CanvasRenderingContext2D, captured: Uint8Array): void => {
-  ctx.fillStyle = PALETTE.capturedFill;
+const drawCaptured = (ctx: CanvasRenderingContext2D, captured: Uint8Array, time: number): void => {
   for (let y = 0; y < GRID_ROWS; y++) {
     for (let x = 0; x < GRID_COLS; x++) {
-      if (captured[y * GRID_COLS + x]) {
-        ctx.fillRect(x * GRID_CELL_SIZE, y * GRID_CELL_SIZE, GRID_CELL_SIZE, GRID_CELL_SIZE);
+      if (!captured[y * GRID_COLS + x]) continue;
+
+      const px = x * GRID_CELL_SIZE;
+      const py = y * GRID_CELL_SIZE;
+
+      ctx.fillStyle = PALETTE.capturedFill;
+      ctx.fillRect(px, py, GRID_CELL_SIZE, GRID_CELL_SIZE);
+
+      if ((x + y + Math.floor(time * 0.005)) % 7 === 0) {
+        ctx.fillStyle = PALETTE.capturedStripe;
+        ctx.fillRect(px, py, GRID_CELL_SIZE, GRID_CELL_SIZE * 0.35);
       }
     }
   }
@@ -116,18 +145,36 @@ const drawTrail = (ctx: CanvasRenderingContext2D, state: GameState, time: number
 
 const drawOrb = (ctx: CanvasRenderingContext2D, state: GameState, time: number): void => {
   const { orb } = state;
-  const pulse = 1 + Math.sin(time * 0.01) * 0.05;
+  const pulse = 1 + Math.sin(time * 0.009) * 0.06;
+
+  ctx.save();
+  ctx.translate(orb.pos.x, orb.pos.y);
+
   ctx.shadowColor = PALETTE.orbGlow;
-  ctx.shadowBlur = 20;
-  const grad = ctx.createRadialGradient(orb.pos.x, orb.pos.y, 0, orb.pos.x, orb.pos.y, orb.radius * 2.4);
-  grad.addColorStop(0, '#fff9d5');
-  grad.addColorStop(0.25, PALETTE.orb);
-  grad.addColorStop(1, 'rgba(255,207,82,0.0)');
-  ctx.fillStyle = grad;
+  ctx.shadowBlur = 18;
+  const core = ctx.createRadialGradient(0, 0, 0, 0, 0, orb.radius * 1.8 * pulse);
+  core.addColorStop(0, '#fff6d1');
+  core.addColorStop(0.45, '#ffb856');
+  core.addColorStop(1, 'rgba(255,149,56,0.05)');
+  ctx.fillStyle = core;
   ctx.beginPath();
-  ctx.arc(orb.pos.x, orb.pos.y, orb.radius * 2.4 * pulse, 0, Math.PI * 2);
+  ctx.arc(0, 0, orb.radius * 1.8 * pulse, 0, Math.PI * 2);
   ctx.fill();
+
   ctx.shadowBlur = 0;
+  ctx.fillStyle = '#3b0f04';
+  ctx.beginPath();
+  ctx.ellipse(-3, -2, 2.2, 3, -0.2, 0, Math.PI * 2);
+  ctx.ellipse(3, -2, 2.2, 3, 0.2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.strokeStyle = 'rgba(255, 87, 42, 0.9)';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(0, 2, orb.radius * 0.7, Math.PI * 0.1, Math.PI * 0.9);
+  ctx.stroke();
+
+  ctx.restore();
 };
 
 const drawChaser = (ctx: CanvasRenderingContext2D, state: GameState, time: number): void => {
@@ -156,7 +203,6 @@ const drawPlayer = (ctx: CanvasRenderingContext2D, state: GameState, time: numbe
   ctx.shadowColor = 'rgba(122, 255, 233, 0.9)';
   ctx.shadowBlur = 18;
 
-  // Road-runner-inspired neon mascot: long beak + crest + trailing legs silhouette.
   ctx.fillStyle = '#8dfdf1';
   ctx.beginPath();
   ctx.ellipse(-2, 0, PLAYER_RADIUS * 0.6, PLAYER_RADIUS * 0.5, 0, 0, Math.PI * 2);
