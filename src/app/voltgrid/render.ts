@@ -18,8 +18,9 @@ export const renderGame = (
   canvasHeight: number,
   time: number,
 ): void => {
-  const scaleX = canvasWidth / ARENA_WIDTH;
-  const scaleY = canvasHeight / ARENA_HEIGHT;
+  const scale = Math.min(canvasWidth / ARENA_WIDTH, canvasHeight / ARENA_HEIGHT);
+  const offsetX = (canvasWidth - ARENA_WIDTH * scale) * 0.5;
+  const offsetY = (canvasHeight - ARENA_HEIGHT * scale) * 0.5;
 
   ctx.save();
   drawFullscreenBackdrop(ctx, canvasWidth, canvasHeight, time);
@@ -28,8 +29,8 @@ export const renderGame = (
   const sx = (Math.random() - 0.5) * shake;
   const sy = (Math.random() - 0.5) * shake;
 
-  ctx.translate(sx, sy);
-  ctx.scale(scaleX, scaleY);
+  ctx.translate(offsetX + sx, offsetY + sy);
+  ctx.scale(scale, scale);
 
   drawArena(ctx, time);
   drawCaptured(ctx, state.captured, time);

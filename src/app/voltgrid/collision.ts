@@ -10,7 +10,7 @@ import {
   TRAIL_HIT_WIDTH,
 } from './constants';
 import type { ArenaEdge, Orb, TrailCollision, Vec2 } from './types';
-import { cellIndex, distance, nearestPointOnSegment, normalize, reflect, worldToCell } from './utils';
+import { cellIndex, clamp, distance, nearestPointOnSegment, normalize, reflect, worldToCell } from './utils';
 
 export const isOnBorder = (p: Vec2): boolean =>
   p.x <= BORDER_LINE + BORDER_REATTACH_EPSILON ||
@@ -38,10 +38,10 @@ export const detectBorderEdge = (p: Vec2): ArenaEdge => {
 };
 
 export const snapToBorder = (p: Vec2): Vec2 => {
-  const left = p.x;
-  const right = ARENA_WIDTH - p.x;
-  const top = p.y;
-  const bottom = ARENA_HEIGHT - p.y;
+  const left = Math.abs(p.x - BORDER_LINE);
+  const right = Math.abs(p.x - (ARENA_WIDTH - BORDER_LINE));
+  const top = Math.abs(p.y - BORDER_LINE);
+  const bottom = Math.abs(p.y - (ARENA_HEIGHT - BORDER_LINE));
   const min = Math.min(left, right, top, bottom);
   if (min === top) return { x: p.x, y: BORDER_LINE };
   if (min === bottom) return { x: p.x, y: ARENA_HEIGHT - BORDER_LINE };
@@ -112,7 +112,20 @@ export const applyCapture = (captured: Uint8Array, trail: Vec2[], orbPos: Vec2):
   const qx = new Int16Array(GRID_COLS * GRID_ROWS);
   const qy = new Int16Array(GRID_COLS * GRID_ROWS);
 
+  let capturedDelta = 0;
+  for (let i = 0; i < trailMask.length; i++) {
+    if (trailMask[i] && !next[i]) {
+      next[i] = 1;
+      capturedDelta++;
+    }
+  }
+
   const start = worldToCell(orbPos);
+  const startIdx = cellIndex(start.x, start.y);
+  if (next[startIdx]) {
+    return { next, capturedDelta };
+  }
+
   let head = 0;
   let tail = 0;
   const push = (x: number, y: number): void => {
@@ -122,7 +135,7 @@ export const applyCapture = (captured: Uint8Array, trail: Vec2[], orbPos: Vec2):
   };
 
   push(start.x, start.y);
-  visited[cellIndex(start.x, start.y)] = 1;
+  visited[startIdx] = 1;
 
   while (head < tail) {
     const x = qx[head];
@@ -139,17 +152,16 @@ export const applyCapture = (captured: Uint8Array, trail: Vec2[], orbPos: Vec2):
     for (const [nx, ny] of neighbors) {
       if (nx < 0 || ny < 0 || nx >= GRID_COLS || ny >= GRID_ROWS) continue;
       const idx = cellIndex(nx, ny);
-      if (visited[idx] || next[idx] || trailMask[idx]) continue;
+      if (visited[idx] || next[idx]) continue;
       visited[idx] = 1;
       push(nx, ny);
     }
   }
 
-  let capturedDelta = 0;
   for (let y = 0; y < GRID_ROWS; y++) {
     for (let x = 0; x < GRID_COLS; x++) {
       const idx = cellIndex(x, y);
-      if (next[idx] || trailMask[idx]) continue;
+      if (next[idx]) continue;
       if (!visited[idx]) {
         next[idx] = 1;
         capturedDelta++;
@@ -160,9 +172,27 @@ export const applyCapture = (captured: Uint8Array, trail: Vec2[], orbPos: Vec2):
   return { next, capturedDelta };
 };
 
-const collidesCaptured = (captured: Uint8Array, x: number, y: number): boolean => {
+export const collidesCaptured = (captured: Uint8Array, x: number, y: number): boolean => {
   const c = worldToCell({ x, y });
   return captured[cellIndex(c.x, c.y)] === 1;
+};
+
+export const ensureOrbInActiveSpace = (orb: Orb, captured: Uint8Array): void => {
+  if (!collidesCaptured(captured, orb.pos.x, orb.pos.y)) return;
+
+  const maxRadius = Math.max(GRID_COLS, GRID_ROWS);
+  for (let radius = 1; radius <= maxRadius; radius++) {
+    for (let ox = -radius; ox <= radius; ox++) {
+      for (let oy = -radius; oy <= radius; oy++) {
+        const x = clamp(orb.pos.x + ox * GRID_CELL_SIZE, BORDER_THICKNESS + orb.radius, ARENA_WIDTH - BORDER_THICKNESS - orb.radius);
+        const y = clamp(orb.pos.y + oy * GRID_CELL_SIZE, BORDER_THICKNESS + orb.radius, ARENA_HEIGHT - BORDER_THICKNESS - orb.radius);
+        if (!collidesCaptured(captured, x, y)) {
+          orb.pos = { x, y };
+          return;
+        }
+      }
+    }
+  }
 };
 
 export const bounceOrb = (orb: Orb, captured: Uint8Array, dt: number): void => {
@@ -203,4 +233,5 @@ export const bounceOrb = (orb: Orb, captured: Uint8Array, dt: number): void => {
 
   orb.pos.x = nextX;
   orb.pos.y = nextY;
+  ensureOrbInActiveSpace(orb, captured);
 };

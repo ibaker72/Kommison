@@ -22,6 +22,7 @@ export default function VoltGrid() {
   const inputRef = useRef<InputState>({ ...initialInput });
   const lastTimeRef = useRef<number>(0);
   const pointerIdRef = useRef<number | null>(null);
+  const pointerOriginRef = useRef<{ x: number; y: number } | null>(null);
   const audioRef = useRef<VoltGridAudio>(new VoltGridAudio());
 
   const [phase, setPhase] = useState<GamePhase>('start');
@@ -35,6 +36,12 @@ export default function VoltGrid() {
     setLives(s.player.lives);
     setRevealPct(s.revealPct);
     setStatusText(s.statusText);
+  }, []);
+
+  const resetPointerInput = useCallback(() => {
+    pointerIdRef.current = null;
+    pointerOriginRef.current = null;
+    inputRef.current = { ...inputRef.current, up: false, down: false, left: false, right: false, pointerActive: false };
   }, []);
 
   const resize = useCallback(() => {
@@ -52,13 +59,15 @@ export default function VoltGrid() {
     const next = startGame();
     stateRef.current = next;
     inputRef.current = { ...initialInput };
+    pointerOriginRef.current = null;
     syncHud(next);
   }, [syncHud]);
 
   const restart = useCallback(async () => {
     stateRef.current = createInitialState();
+    resetPointerInput();
     await start();
-  }, [start]);
+  }, [resetPointerInput, start]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent): void => {
@@ -91,6 +100,7 @@ export default function VoltGrid() {
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('resize', resize);
     window.visualViewport?.addEventListener('resize', resize);
+    window.addEventListener('blur', resetPointerInput);
     resize();
 
     const loop = (now: number): void => {
@@ -104,6 +114,7 @@ export default function VoltGrid() {
 
       const result = stepGame(stateRef.current, inputRef.current, dtMs);
       stateRef.current = result.state;
+      if (result.clearPointerInput) resetPointerInput();
       result.events.forEach((event) => audioRef.current.play(event));
       syncHud(stateRef.current);
 
@@ -118,19 +129,21 @@ export default function VoltGrid() {
       window.removeEventListener('keyup', onKeyUp);
       window.removeEventListener('resize', resize);
       window.visualViewport?.removeEventListener('resize', resize);
+      window.removeEventListener('blur', resetPointerInput);
       cancelAnimationFrame(frameRef.current);
     };
-  }, [resize, start, syncHud]);
+  }, [resetPointerInput, resize, start, syncHud]);
 
   const handlePointer = (clientX: number, clientY: number): void => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const rect = canvas.getBoundingClientRect();
-    const cx = clientX - (rect.left + rect.width / 2);
-    const cy = clientY - (rect.top + rect.height / 2);
-    const deadZone = 14;
+    const origin = pointerOriginRef.current;
+    if (!origin) return;
 
-    if (Math.hypot(cx, cy) < deadZone) {
+    const dx = clientX - origin.x;
+    const dy = clientY - origin.y;
+    const deadZone = 18;
+    const engageDistance = 30;
+
+    if (Math.hypot(dx, dy) < deadZone) {
       inputRef.current.up = false;
       inputRef.current.down = false;
       inputRef.current.left = false;
@@ -138,28 +151,29 @@ export default function VoltGrid() {
       return;
     }
 
-    if (Math.abs(cx) > Math.abs(cy)) {
-      inputRef.current.left = cx < 0;
-      inputRef.current.right = cx > 0;
+    if (Math.abs(dx) > Math.abs(dy) + engageDistance * 0.16) {
+      inputRef.current.left = dx < 0;
+      inputRef.current.right = dx > 0;
       inputRef.current.up = false;
       inputRef.current.down = false;
-    } else {
-      inputRef.current.up = cy < 0;
-      inputRef.current.down = cy > 0;
-      inputRef.current.left = false;
-      inputRef.current.right = false;
+      return;
     }
+
+    inputRef.current.up = dy < 0;
+    inputRef.current.down = dy > 0;
+    inputRef.current.left = false;
+    inputRef.current.right = false;
   };
 
   return (
     <div className="voltgrid-shell text-cyan-100 select-none" style={{ touchAction: 'none', overscrollBehavior: 'none' }}>
       <header className="voltgrid-hud z-20">
-        <div className="flex items-center gap-2 md:gap-3">
-          <h1 className="text-[10px] md:text-[11px] font-semibold tracking-[0.34em] text-cyan-200">VOLTGRID</h1>
-          <span className="text-[10px] text-cyan-100/80">{revealPct.toFixed(1)}%</span>
-          <span className="text-[9px] text-cyan-300/70">Goal {TARGET_REVEAL_PERCENT}%</span>
+        <div className="flex items-center gap-2">
+          <h1 className="text-[10px] font-semibold tracking-[0.28em] text-cyan-200">VOLTGRID</h1>
+          <span className="text-[10px] text-cyan-100/85">{revealPct.toFixed(1)}%</span>
+          <span className="hidden text-[9px] text-cyan-300/70 sm:inline">Goal {TARGET_REVEAL_PERCENT}%</span>
         </div>
-        <div className="flex items-center gap-1.5 md:gap-2">
+        <div className="flex items-center gap-1.5">
           <span className="text-[10px] text-cyan-100/90">Lives {lives}</span>
           <button className="voltgrid-btn" onClick={() => void restart()}>Restart</button>
           <button
@@ -185,6 +199,7 @@ export default function VoltGrid() {
             await audioRef.current.ensureReady();
             if (stateRef.current.phase === 'start') await start();
             pointerIdRef.current = e.pointerId;
+            pointerOriginRef.current = { x: e.clientX, y: e.clientY };
             inputRef.current.pointerActive = true;
             handlePointer(e.clientX, e.clientY);
           }}
@@ -196,12 +211,10 @@ export default function VoltGrid() {
           onPointerUp={(e) => {
             if (pointerIdRef.current !== e.pointerId) return;
             e.preventDefault();
-            pointerIdRef.current = null;
-            inputRef.current = { ...inputRef.current, up: false, down: false, left: false, right: false, pointerActive: false };
+            resetPointerInput();
           }}
           onPointerCancel={() => {
-            pointerIdRef.current = null;
-            inputRef.current = { ...inputRef.current, up: false, down: false, left: false, right: false, pointerActive: false };
+            resetPointerInput();
           }}
           onContextMenu={(e) => e.preventDefault()}
         />
@@ -215,8 +228,8 @@ export default function VoltGrid() {
                 {phase === 'lost' && 'System Overload'}
                 {phase === 'paused' && 'Paused'}
               </h2>
-              <p className="mb-6 text-sm text-cyan-100/70">{statusText}</p>
-              <div className="mb-6 text-xs text-cyan-300/60">Keyboard: Arrows / WASD • Touch: drag anywhere, release to stop.</div>
+              <p className="mb-5 text-sm text-cyan-100/70">{statusText}</p>
+              <div className="mb-5 text-xs text-cyan-300/60">Keyboard: Arrows / WASD • Touch: drag from touch-down point, release to stop.</div>
               {phase === 'start' && <button className="rounded-lg border border-cyan-300/50 px-6 py-2 hover:bg-cyan-500/20" onClick={() => void start()}>Start Mission</button>}
               {(phase === 'won' || phase === 'lost') && <button className="rounded-lg border border-cyan-300/50 px-6 py-2 hover:bg-cyan-500/20" onClick={() => void restart()}>Play Again</button>}
               {phase === 'paused' && (
@@ -235,9 +248,7 @@ export default function VoltGrid() {
         )}
       </main>
 
-      <div className="pointer-events-none absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/70 to-transparent px-3 pb-[calc(env(safe-area-inset-bottom)+0.32rem)] pt-4 text-[10px] text-cyan-100/72">
-        {statusText}
-      </div>
+      <div className="voltgrid-status">{statusText}</div>
     </div>
   );
 }

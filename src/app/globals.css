@@ -66,19 +66,19 @@ body {
 }
 
 .voltgrid-hud {
-  height: calc(2.06rem + env(safe-area-inset-top));
+  height: calc(2rem + env(safe-area-inset-top));
   padding-top: env(safe-area-inset-top);
-  padding-inline: 0.58rem;
+  padding-inline: 0.5rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid rgba(68, 223, 255, 0.28);
-  background: linear-gradient(180deg, rgba(3, 8, 21, 0.92), rgba(3, 8, 21, 0.66));
+  background: linear-gradient(180deg, rgba(3, 8, 21, 0.94), rgba(3, 8, 21, 0.7));
   backdrop-filter: blur(8px);
 }
 
 .voltgrid-btn {
-  padding: 0.22rem 0.47rem;
+  padding: 0.18rem 0.42rem;
   font-size: 10px;
   border-radius: 0.4rem;
   border: 1px solid rgba(120, 236, 255, 0.4);
@@ -87,4 +87,30 @@ body {
 
 .voltgrid-btn:hover {
   background: rgba(50, 176, 220, 0.25);
+}
+
+.voltgrid-status {
+  pointer-events: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.74));
+  padding: 0.28rem 0.55rem calc(env(safe-area-inset-bottom) + 0.3rem);
+  font-size: 10px;
+  line-height: 1.2;
+  color: rgba(213, 248, 255, 0.82);
+}
+
+@media (max-width: 640px) {
+  .voltgrid-hud {
+    height: calc(1.8rem + env(safe-area-inset-top));
+    padding-inline: 0.4rem;
+  }
+
+  .voltgrid-status {
+    font-size: 9px;
+    padding-inline: 0.42rem;
+  }
 }

@@ -75,6 +75,7 @@ export type GameEvent =
 export interface StepResult {
   state: GameState;
   events: GameEvent[];
+  clearPointerInput?: boolean;
 }
 
 export interface TrailCollision {

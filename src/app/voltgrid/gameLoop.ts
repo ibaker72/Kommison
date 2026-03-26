@@ -4,6 +4,7 @@ import {
   BORDER_LINE,
   CHASER_SPEED,
   DETACH_PUSH_DISTANCE,
+  GRID_CELL_SIZE,
   GRID_COLS,
   GRID_ROWS,
   INITIAL_LIVES,
@@ -17,7 +18,7 @@ import {
   TARGET_REVEAL_PERCENT,
   TRAIL_POINT_SPACING,
 } from './constants';
-import { applyCapture, bounceOrb, detectBorderEdge, isOnBorder, resolveOrbTrailCollision, snapToBorder } from './collision';
+import { applyCapture, bounceOrb, collidesCaptured, detectBorderEdge, ensureOrbInActiveSpace, isOnBorder, resolveOrbTrailCollision, snapToBorder } from './collision';
 import type { ArenaEdge, GameEvent, GameState, InputState, Particle, StepResult, Vec2 } from './types';
 import { cellIndex, clamp, distance, pointOnTrailByDistance, trailLength, worldToCell } from './utils';
 
@@ -108,20 +109,44 @@ const spawnParticles = (at: Vec2, color: string, count: number): Particle[] => {
   return p;
 };
 
+const nearestPlayableBorderPoint = (captured: Uint8Array, origin: Vec2): Vec2 => {
+  const points: Vec2[] = [];
+  for (let x = BORDER_LINE; x <= ARENA_WIDTH - BORDER_LINE; x += GRID_CELL_SIZE) {
+    points.push({ x, y: BORDER_LINE }, { x, y: ARENA_HEIGHT - BORDER_LINE });
+  }
+  for (let y = BORDER_LINE; y <= ARENA_HEIGHT - BORDER_LINE; y += GRID_CELL_SIZE) {
+    points.push({ x: BORDER_LINE, y }, { x: ARENA_WIDTH - BORDER_LINE, y });
+  }
+
+  let best: Vec2 = spawnPlayer();
+  let bestDist = Number.POSITIVE_INFINITY;
+  for (const point of points) {
+    if (collidesCaptured(captured, point.x, point.y)) continue;
+    const d = distance(point, origin);
+    if (d < bestDist) {
+      bestDist = d;
+      best = point;
+    }
+  }
+
+  return snapToBorder(best);
+};
+
 const loseLife = (state: GameState): GameState => {
   const lives = state.player.lives - 1;
   const phase = lives <= 0 ? 'lost' : 'playing';
+  const safeSpawn = nearestPlayableBorderPoint(state.captured, spawnPlayer());
   return {
     ...state,
     phase,
     player: {
       ...state.player,
-      pos: spawnPlayer(),
+      pos: safeSpawn,
       vel: { x: 0, y: 0 },
       trail: [],
       trailHeading: { x: 0, y: 0 },
       onBorder: true,
-      attachedEdge: 'top',
+      attachedEdge: detectBorderEdge(safeSpawn),
       motionState: 'respawning',
       lives,
       invulnMs: RESPAWN_INVULN_MS,
@@ -141,6 +166,47 @@ const resolveTrailDirection = (inputDir: Vec2, previous: Vec2): Vec2 => {
   if (previous.x === 0 && previous.y === 0) return inputDir;
   const isReverse = inputDir.x === -previous.x && inputDir.y === -previous.y;
   return isReverse ? previous : inputDir;
+};
+
+const finalizeCapture = (state: GameState, events: GameEvent[]): GameState => {
+  const snapped = snapToBorder(state.player.pos);
+  addTrailPoint(state.player.trail, snapped);
+  if (state.chaser?.active) events.push('safe-reconnect');
+
+  const capture = applyCapture(state.captured, state.player.trail, state.orb.pos);
+  const nextState: GameState = {
+    ...state,
+    captured: capture.next,
+    capturedCount: state.capturedCount + capture.capturedDelta,
+    revealPct: ((state.capturedCount + capture.capturedDelta) / (GRID_COLS * GRID_ROWS)) * 100,
+    chaser: null,
+    player: {
+      ...state.player,
+      pos: snapped,
+      attachedEdge: detectBorderEdge(snapped),
+      onBorder: true,
+      trail: [],
+      trailHeading: { x: 0, y: 0 },
+      motionState: state.player.invulnMs > 0 ? 'respawning' : 'border-attached',
+    },
+  };
+
+  const safePlayerPos = nearestPlayableBorderPoint(nextState.captured, snapped);
+  nextState.player.pos = safePlayerPos;
+  nextState.player.attachedEdge = detectBorderEdge(safePlayerPos);
+  ensureOrbInActiveSpace(nextState.orb, nextState.captured);
+
+  if (capture.capturedDelta > 0) {
+    nextState.particles.push(...spawnParticles(safePlayerPos, 'rgba(91,255,239,1)', 18));
+    events.push('capture');
+    if (nextState.revealPct >= TARGET_REVEAL_PERCENT) {
+      nextState.phase = 'won';
+      nextState.statusText = 'Grid secured. Voltage stabilized.';
+      events.push('win');
+    }
+  }
+
+  return nextState;
 };
 
 export const startGame = (): GameState => ({ ...createInitialState(), phase: 'playing' });
@@ -219,33 +285,8 @@ export const stepGame = (prev: GameState, input: InputState, dtMs: number): Step
       }
 
       if (isOnBorder(state.player.pos)) {
-        const snapped = snapToBorder(state.player.pos);
-        addTrailPoint(state.player.trail, snapped);
         state.player.motionState = 'capture-resolve';
-        state.player.pos = snapped;
-        state.player.attachedEdge = detectBorderEdge(snapped);
-        state.player.onBorder = true;
-
-        if (state.chaser?.active) events.push('safe-reconnect');
-
-        const capture = applyCapture(state.captured, state.player.trail, state.orb.pos);
-        if (capture.capturedDelta > 0) {
-          state.captured = capture.next;
-          state.capturedCount += capture.capturedDelta;
-          state.revealPct = (state.capturedCount / (GRID_COLS * GRID_ROWS)) * 100;
-          state.particles.push(...spawnParticles(snapped, 'rgba(91,255,239,1)', 18));
-          events.push('capture');
-          if (state.revealPct >= TARGET_REVEAL_PERCENT) {
-            state.phase = 'won';
-            state.statusText = 'Grid secured. Voltage stabilized.';
-            events.push('win');
-          }
-        }
-
-        state.player.trail = [];
-        state.player.trailHeading = { x: 0, y: 0 };
-        state.player.motionState = state.player.invulnMs > 0 ? 'respawning' : 'border-attached';
-        state.chaser = null;
+        state = finalizeCapture(state, events);
       }
     }
   }
@@ -268,9 +309,12 @@ export const stepGame = (prev: GameState, input: InputState, dtMs: number): Step
     }
   }
 
+  let clearPointerInput = false;
+
   if (state.player.invulnMs <= 0 && distance(state.orb.pos, state.player.pos) <= state.orb.radius + PLAYER_HIT_RADIUS) {
     state = loseLife(state);
     events.push('death-hit');
+    clearPointerInput = true;
     if (state.phase === 'lost') events.push('game-over');
   }
 
@@ -280,9 +324,14 @@ export const stepGame = (prev: GameState, input: InputState, dtMs: number): Step
     state.chaser.pos = pointOnTrailByDistance(state.player.trail, state.chaser.distanceAlong);
     if (state.chaser.distanceAlong >= state.chaser.pathLength - 2) {
       state = loseLife(state);
+      clearPointerInput = true;
       events.push('death-hit');
       if (state.phase === 'lost') events.push('game-over');
     }
+  }
+
+  if (state.player.motionState === 'capture-resolve' || events.includes('capture')) {
+    clearPointerInput = true;
   }
 
   state.particles = state.particles
@@ -299,5 +348,5 @@ export const stepGame = (prev: GameState, input: InputState, dtMs: number): Step
       : 'Claimed zones are safe. Keep shrinking the live orb sector.';
   }
 
-  return { state, events };
+  return { state, events, clearPointerInput };
 };
