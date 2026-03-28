@@ -3,6 +3,8 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --voltgrid-safe-top: env(safe-area-inset-top, 0px);
+  --voltgrid-safe-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 @theme inline {
@@ -41,6 +43,11 @@ body {
   touch-action: none;
 }
 
+body.voltgrid-body-lock {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
 #__next {
   min-height: 100dvh;
 }
@@ -49,8 +56,10 @@ body {
   position: fixed;
   inset: 0;
   width: 100vw;
+  height: 100vh;
+  height: 100svh;
   height: 100dvh;
-  min-height: 100svh;
+  max-height: 100dvh;
   overflow: clip;
   background: #030612;
 }
