@@ -3,7 +3,11 @@ export interface LevelDefinition {
   label: string;
   targetRevealPercent: number;
   orbCount: number;
-  orbSpeedMultiplier: number;
+  orbSpeed: number;
+  lives: number;
+  modifiers?: {
+    bounceVariance?: number;
+  };
 }
 
 export const VOLTGRID_LEVELS: LevelDefinition[] = [
@@ -12,6 +16,23 @@ export const VOLTGRID_LEVELS: LevelDefinition[] = [
     label: 'Containment Breach',
     targetRevealPercent: 72,
     orbCount: 1,
-    orbSpeedMultiplier: 1,
+    orbSpeed: 180,
+    lives: 3,
+  },
+  {
+    id: 'lvl-02',
+    label: 'Voltage Surge',
+    targetRevealPercent: 74,
+    orbCount: 1,
+    orbSpeed: 225,
+    lives: 3,
+  },
+  {
+    id: 'lvl-03',
+    label: 'Twin Core Panic',
+    targetRevealPercent: 76,
+    orbCount: 2,
+    orbSpeed: 210,
+    lives: 2,
   },
 ];

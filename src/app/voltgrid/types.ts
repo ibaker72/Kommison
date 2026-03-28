@@ -46,7 +46,7 @@ export interface Particle {
 export interface GameState {
   phase: GamePhase;
   player: Player;
-  orb: Orb;
+  orbs: Orb[];
   chaser: TrailChaser | null;
   captured: Uint8Array;
   capturedCount: number;

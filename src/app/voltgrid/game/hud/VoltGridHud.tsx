@@ -12,10 +12,11 @@ interface VoltGridHudProps {
 
 export const VoltGridHud = ({ snapshot, muted, onRestart, onToggleMuted, hudRef }: VoltGridHudProps) => (
   <header ref={hudRef} className="voltgrid-hud z-20">
-    <div className="flex items-center gap-2">
+    <div className="flex items-center gap-2 min-w-0">
       <h1 className="text-[10px] font-semibold tracking-[0.28em] text-cyan-200">VOLTGRID</h1>
+      <span className="text-[10px] text-cyan-100/90">L{snapshot.levelIndex + 1}</span>
       <span className="text-[10px] text-cyan-100/85">{snapshot.revealPct.toFixed(1)}%</span>
-      <span className="hidden text-[9px] text-cyan-300/70 sm:inline">Goal {TARGET_REVEAL_PERCENT}%</span>
+      <span className="hidden text-[9px] text-cyan-300/70 sm:inline">Goal {snapshot.targetPct ?? TARGET_REVEAL_PERCENT}%</span>
     </div>
     <div className="flex items-center gap-1.5">
       <span className="text-[10px] text-cyan-100/90">Lives {snapshot.lives}</span>

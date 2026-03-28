@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { VoltGridAudio } from './audio';
 import { useBoardLayout } from './game/board/useBoardLayout';
 import { stepSimulation } from './game/engine/simulation';
-import { VoltGridHud } from './game/hud/VoltGridHud';
 import { PhaseOverlay } from './game/hud/PhaseOverlay';
+import { VoltGridHud } from './game/hud/VoltGridHud';
 import { useInputController } from './game/input/useInputController';
 import { renderFrame } from './game/rendering/renderer';
 import { createStore, frameSnapshotFromState, reduceStore } from './game/state/store';
@@ -40,7 +40,7 @@ export default function VoltGrid() {
 
   const start = useCallback(async () => {
     await audioRef.current.ensureReady();
-    storeRef.current = reduceStore(storeRef.current, { type: 'start' });
+    storeRef.current = reduceStore(storeRef.current, { type: 'start-run' });
     reset();
     syncSnapshot();
   }, [reset, syncSnapshot]);
@@ -67,21 +67,21 @@ export default function VoltGrid() {
   useEffect(() => {
     const onWindowKeyDown = (event: KeyboardEvent): void => {
       if (event.key === ' ') {
-        if (storeRef.current.state.phase === 'start') void start();
+        if (storeRef.current.state.flowPhase === 'intro') void start();
         return;
       }
 
       if (event.key === 'p' || event.key === 'P') {
-        const phase = storeRef.current.state.phase;
+        const phase = storeRef.current.state.core.phase;
         if (phase === 'playing') {
           storeRef.current = reduceStore(storeRef.current, {
-            type: 'replace',
-            next: { ...storeRef.current.state, phase: 'paused' },
+            type: 'replace-core',
+            next: { ...storeRef.current.state.core, phase: 'paused' },
           });
         } else if (phase === 'paused') {
           storeRef.current = reduceStore(storeRef.current, {
-            type: 'replace',
-            next: { ...storeRef.current.state, phase: 'playing' },
+            type: 'replace-core',
+            next: { ...storeRef.current.state.core, phase: 'playing' },
           });
         }
         syncSnapshot();
@@ -111,8 +111,14 @@ export default function VoltGrid() {
       const dtMs = lastTimeRef.current ? now - lastTimeRef.current : 16;
       lastTimeRef.current = now;
 
-      const result = stepSimulation(storeRef.current.state, inputRef.current, dtMs);
-      storeRef.current = reduceStore(storeRef.current, { type: 'replace', next: result.state });
+      if (storeRef.current.state.flowPhase !== 'playing' && storeRef.current.state.core.phase !== 'paused') {
+        renderFrame(canvasCtx, storeRef.current.state.core, canvasEl.width, canvasEl.height, now);
+        frameRef.current = requestAnimationFrame(tick);
+        return;
+      }
+
+      const result = stepSimulation(storeRef.current.state.core, inputRef.current, dtMs);
+      storeRef.current = reduceStore(storeRef.current, { type: 'replace-core', next: result.state });
 
       if (result.clearPointerInput) {
         reset();
@@ -120,7 +126,7 @@ export default function VoltGrid() {
 
       result.events.forEach((event) => audioRef.current.play(event));
       syncSnapshot();
-      renderFrame(canvasCtx, storeRef.current.state, canvasEl.width, canvasEl.height, now);
+      renderFrame(canvasCtx, storeRef.current.state.core, canvasEl.width, canvasEl.height, now);
 
       frameRef.current = requestAnimationFrame(tick);
     };
@@ -157,7 +163,7 @@ export default function VoltGrid() {
           className="absolute inset-0 h-full w-full"
           onPointerDown={async (event) => {
             await audioRef.current.ensureReady();
-            if (storeRef.current.state.phase === 'start') await start();
+            if (storeRef.current.state.flowPhase === 'intro') await start();
             pointerHandlers.onPointerDown(event);
           }}
           onPointerMove={pointerHandlers.onPointerMove}
@@ -169,11 +175,16 @@ export default function VoltGrid() {
         <PhaseOverlay
           snapshot={snapshot}
           onStart={() => void start()}
-          onRestart={() => void restart()}
+          onRestartRun={() => void restart()}
+          onNextLevel={() => {
+            storeRef.current = reduceStore(storeRef.current, { type: 'next-level' });
+            reset();
+            syncSnapshot();
+          }}
           onResume={() => {
             storeRef.current = reduceStore(storeRef.current, {
-              type: 'replace',
-              next: { ...storeRef.current.state, phase: 'playing' },
+              type: 'replace-core',
+              next: { ...storeRef.current.state.core, phase: 'playing' },
             });
             syncSnapshot();
           }}

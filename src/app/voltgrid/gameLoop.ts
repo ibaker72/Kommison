@@ -53,11 +53,13 @@ export const createInitialState = (): GameState => {
       invulnMs: 0,
       heading: 0,
     },
-    orb: {
-      pos: { x: ARENA_WIDTH * 0.5, y: ARENA_HEIGHT * 0.52 },
-      vel: randomOrbVelocity(),
-      radius: ORB_RADIUS,
-    },
+    orbs: [
+      {
+        pos: { x: ARENA_WIDTH * 0.5, y: ARENA_HEIGHT * 0.52 },
+        vel: randomOrbVelocity(),
+        radius: ORB_RADIUS,
+      },
+    ],
     chaser: null,
     captured,
     capturedCount: 0,
@@ -173,7 +175,7 @@ const finalizeCapture = (state: GameState, events: GameEvent[]): GameState => {
   addTrailPoint(state.player.trail, snapped);
   if (state.chaser?.active) events.push('safe-reconnect');
 
-  const capture = applyCapture(state.captured, state.player.trail, state.orb.pos);
+  const capture = applyCapture(state.captured, state.player.trail, state.orbs.map((orb) => orb.pos));
   const nextState: GameState = {
     ...state,
     captured: capture.next,
@@ -194,7 +196,7 @@ const finalizeCapture = (state: GameState, events: GameEvent[]): GameState => {
   const safePlayerPos = nearestPlayableBorderPoint(nextState.captured, snapped);
   nextState.player.pos = safePlayerPos;
   nextState.player.attachedEdge = detectBorderEdge(safePlayerPos);
-  ensureOrbInActiveSpace(nextState.orb, nextState.captured);
+  nextState.orbs.forEach((orb) => ensureOrbInActiveSpace(orb, nextState.captured));
 
   if (capture.capturedDelta > 0) {
     nextState.particles.push(...spawnParticles(safePlayerPos, 'rgba(91,255,239,1)', 18));
@@ -223,7 +225,7 @@ export const stepGame = (prev: GameState, input: InputState, dtMs: number): Step
   let state: GameState = {
     ...prev,
     player: { ...prev.player, trail: [...prev.player.trail], trailHeading: { ...prev.player.trailHeading } },
-    orb: { ...prev.orb, pos: { ...prev.orb.pos }, vel: { ...prev.orb.vel } },
+    orbs: prev.orbs.map((orb) => ({ ...orb, pos: { ...orb.pos }, vel: { ...orb.vel } })),
     particles: [...prev.particles],
     shakeMs: Math.max(0, prev.shakeMs - dtMs),
   };
@@ -291,27 +293,30 @@ export const stepGame = (prev: GameState, input: InputState, dtMs: number): Step
     }
   }
 
-  bounceOrb(state.orb, state.captured, dt);
+  state.orbs.forEach((orb) => bounceOrb(orb, state.captured, dt));
 
   if (state.phase === 'playing' && state.player.trail.length > 1) {
-    const hit = resolveOrbTrailCollision(state.orb, state.player.trail);
-    if (hit && !state.chaser) {
-      const initialDist = trailLength(state.player.trail.slice(0, hit.segmentIndex + 1));
-      state.chaser = {
-        distanceAlong: initialDist,
-        pathLength: trailLength(state.player.trail),
-        pos: pointOnTrailByDistance(state.player.trail, initialDist),
-        active: true,
-      };
-      state.particles.push(...spawnParticles(state.chaser.pos, 'rgba(255,105,127,1)', 12));
-      state.shakeMs = SHAKE_MS;
-      events.push('trail-infected');
+    for (const orb of state.orbs) {
+      const hit = resolveOrbTrailCollision(orb, state.player.trail);
+      if (hit && !state.chaser) {
+        const initialDist = trailLength(state.player.trail.slice(0, hit.segmentIndex + 1));
+        state.chaser = {
+          distanceAlong: initialDist,
+          pathLength: trailLength(state.player.trail),
+          pos: pointOnTrailByDistance(state.player.trail, initialDist),
+          active: true,
+        };
+        state.particles.push(...spawnParticles(state.chaser.pos, 'rgba(255,105,127,1)', 12));
+        state.shakeMs = SHAKE_MS;
+        events.push('trail-infected');
+      }
     }
   }
 
   let clearPointerInput = false;
 
-  if (state.player.invulnMs <= 0 && distance(state.orb.pos, state.player.pos) <= state.orb.radius + PLAYER_HIT_RADIUS) {
+  const touchedOrb = state.orbs.some((orb) => distance(orb.pos, state.player.pos) <= orb.radius + PLAYER_HIT_RADIUS);
+  if (state.player.invulnMs <= 0 && touchedOrb) {
     state = loseLife(state);
     events.push('death-hit');
     clearPointerInput = true;

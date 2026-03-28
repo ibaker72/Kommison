@@ -20,8 +20,13 @@ export interface BoardLayout {
 
 export interface FrameSnapshot {
   phase: GamePhase;
+  flowPhase: 'intro' | 'playing' | 'level-cleared' | 'game-over' | 'campaign-won';
+  levelIndex: number;
+  levelLabel: string;
+  levelCount: number;
   lives: number;
   revealPct: number;
+  targetPct: number;
   statusText: string;
 }
 
@@ -32,3 +37,9 @@ export interface SimulationResult {
 }
 
 export type { GameEvent, GamePhase, GameState, InputState };
+
+export interface CampaignState {
+  core: GameState;
+  flowPhase: FrameSnapshot['flowPhase'];
+  levelIndex: number;
+}

@@ -105,7 +105,7 @@ export const buildTrailBlockMask = (trail: Vec2[]): Uint8Array => {
   return mask;
 };
 
-export const applyCapture = (captured: Uint8Array, trail: Vec2[], orbPos: Vec2): { next: Uint8Array; capturedDelta: number } => {
+export const applyCapture = (captured: Uint8Array, trail: Vec2[], orbPositions: Vec2[]): { next: Uint8Array; capturedDelta: number } => {
   const next = new Uint8Array(captured);
   const trailMask = buildTrailBlockMask(trail);
   const visited = new Uint8Array(GRID_COLS * GRID_ROWS);
@@ -120,12 +120,6 @@ export const applyCapture = (captured: Uint8Array, trail: Vec2[], orbPos: Vec2):
     }
   }
 
-  const start = worldToCell(orbPos);
-  const startIdx = cellIndex(start.x, start.y);
-  if (next[startIdx]) {
-    return { next, capturedDelta };
-  }
-
   let head = 0;
   let tail = 0;
   const push = (x: number, y: number): void => {
@@ -134,8 +128,13 @@ export const applyCapture = (captured: Uint8Array, trail: Vec2[], orbPos: Vec2):
     tail++;
   };
 
-  push(start.x, start.y);
-  visited[startIdx] = 1;
+  for (const orbPos of orbPositions) {
+    const start = worldToCell(orbPos);
+    const startIdx = cellIndex(start.x, start.y);
+    if (next[startIdx] || visited[startIdx]) continue;
+    push(start.x, start.y);
+    visited[startIdx] = 1;
+  }
 
   while (head < tail) {
     const x = qx[head];

@@ -35,7 +35,7 @@ export const renderGame = (
   drawArena(ctx, time);
   drawCaptured(ctx, state.captured, time);
   drawTrail(ctx, state, time);
-  drawOrb(ctx, state, time);
+  state.orbs.forEach((orb) => drawOrb(ctx, orb, time));
   drawChaser(ctx, state, time);
   drawPlayer(ctx, state, time);
   drawParticles(ctx, state.particles);
@@ -168,8 +168,7 @@ const drawTrail = (ctx: CanvasRenderingContext2D, state: GameState, time: number
   }
 };
 
-const drawOrb = (ctx: CanvasRenderingContext2D, state: GameState, time: number): void => {
-  const { orb } = state;
+const drawOrb = (ctx: CanvasRenderingContext2D, orb: GameState['orbs'][number], time: number): void => {
   const pulse = 1 + Math.sin(time * 0.007) * 0.08;
   const r = orb.radius;
 
