@@ -4,11 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { VoltGridAudio } from './audio';
 import { useBoardLayout } from './game/board/useBoardLayout';
 import { stepSimulation } from './game/engine/simulation';
-import { PhaseOverlay } from './game/hud/PhaseOverlay';
-import { VoltGridHud } from './game/hud/VoltGridHud';
+import { PhaseOverlay, VoltGridHud } from './game/hud';
 import { useInputController } from './game/input/useInputController';
 import { renderFrame } from './game/rendering/renderer';
-import { createStore, frameSnapshotFromState, reduceStore } from './game/state/store';
+import { createStore, frameSnapshotFromState, reduceStore } from './game/state';
 import type { FrameSnapshot } from './game/types/interfaces';
 
 export default function VoltGrid() {
