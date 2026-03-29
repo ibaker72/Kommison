@@ -2,86 +2,58 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>VoltGrid — Cyber‑Void Arcade</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#050510" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>VoltGrid — Cyber-Void</title>
   <style>
     :root {
       --bg: #050510;
+      --panel: rgba(8, 13, 30, 0.82);
       --cyan: #00f6ff;
       --magenta: #ff2dff;
       --red: #ff355e;
-      --grid: rgba(90, 110, 255, 0.11);
-      --panel: rgba(10, 14, 35, 0.65);
-      --text: #dffbff;
+      --text: #d9f7ff;
+      --gridLine: rgba(90, 120, 255, 0.13);
     }
     * { box-sizing: border-box; }
-    html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: Inter, system-ui, Segoe UI, Roboto, sans-serif; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--text); font-family: Inter, system-ui, -apple-system, Segoe UI, sans-serif; }
     #app { height: 100%; display: grid; grid-template-rows: auto 1fr; }
     #hud {
-      position: relative;
-      z-index: 3;
-      display: flex;
-      flex-wrap: wrap;
-      gap: .65rem 1.1rem;
-      align-items: center;
-      padding: .6rem .8rem;
-      background: linear-gradient(180deg, rgba(7, 12, 32, .92), rgba(7, 12, 32, .55));
-      border-bottom: 1px solid rgba(140, 240, 255, .2);
-      font-weight: 600;
-      text-shadow: 0 0 8px rgba(0, 246, 255, .5);
-      user-select: none;
+      display: flex; flex-wrap: wrap; gap: .45rem 1rem; align-items: center;
+      padding: .65rem .85rem;
+      background: linear-gradient(180deg, rgba(8, 11, 30, .98), rgba(8, 11, 30, .6));
+      border-bottom: 1px solid rgba(0, 246, 255, .22);
+      text-shadow: 0 0 8px rgba(0, 246, 255, .35);
+      font-weight: 650; user-select: none; z-index: 8;
     }
-    #hud .alert { color: #ffeef4; text-shadow: 0 0 8px rgba(255, 40, 90, .8); min-width: 7rem; }
+    #hud .timer { color: #ffdce7; text-shadow: 0 0 10px rgba(255, 53, 94, .85); min-width: 5.8rem; }
+    #hud .spacer { margin-left: auto; }
     #hud button {
-      margin-left: auto;
       border: 1px solid rgba(0, 246, 255, .45);
-      color: var(--text);
-      background: rgba(0, 246, 255, .12);
-      border-radius: .5rem;
-      padding: .35rem .65rem;
-      font-weight: 700;
+      background: rgba(0, 246, 255, .12); color: var(--text);
+      border-radius: .45rem; padding: .32rem .62rem; font-weight: 700;
     }
     #arena { position: relative; min-height: 0; }
-    #game {
-      display: block;
-      width: 100%;
-      height: 100%;
-      touch-action: none;
-      background: radial-gradient(circle at 50% 40%, rgba(58, 18, 90, .2), transparent 60%), var(--bg);
-    }
+    canvas { width: 100%; height: 100%; display: block; touch-action: none; background: var(--bg); }
     #overlay {
-      position: absolute;
-      inset: 0;
-      pointer-events: none;
-      display: grid;
-      place-items: center;
-      font-size: clamp(1rem, 2vw, 1.7rem);
-      font-weight: 800;
-      color: #fff;
-      text-align: center;
-      text-shadow: 0 0 12px rgba(255, 45, 255, .95);
-    }
-    #joystick {
-      position: absolute;
-      width: 140px;
-      height: 140px;
-      margin-left: -70px;
-      margin-top: -70px;
-      border-radius: 50%;
-      border: 2px solid rgba(0, 246, 255, .4);
-      background: rgba(0, 246, 255, .06);
-      display: none;
-      pointer-events: none;
+      position: absolute; inset: 0; display: grid; place-items: center;
+      pointer-events: none; text-align: center;
+      font-size: clamp(1rem, 2.2vw, 1.65rem); font-weight: 800;
+      color: #ffffff; text-shadow: 0 0 14px rgba(255, 45, 255, .95);
       z-index: 4;
     }
-    #joystick::after {
-      content: "";
-      position: absolute;
-      inset: 44px;
-      border-radius: 50%;
-      background: rgba(0, 246, 255, .55);
-      box-shadow: 0 0 14px rgba(0, 246, 255, .8);
-      transform: translate(var(--knobX, 0px), var(--knobY, 0px));
+    #joy {
+      position: absolute; width: 138px; height: 138px; margin-left: -69px; margin-top: -69px;
+      border-radius: 50%; display: none; pointer-events: none; z-index: 5;
+      border: 2px solid rgba(0, 246, 255, .45); background: rgba(0, 246, 255, .08);
+      box-shadow: 0 0 14px rgba(0, 246, 255, .22);
+    }
+    #joy::after {
+      content: ""; position: absolute; inset: 42px; border-radius: 50%;
+      background: rgba(0, 246, 255, .55); box-shadow: 0 0 14px rgba(0, 246, 255, .85);
+      transform: translate(var(--jx, 0px), var(--jy, 0px));
     }
   </style>
 </head>
@@ -93,13 +65,14 @@
     <span id="score"></span>
     <span id="high"></span>
     <span id="lives"></span>
-    <span class="alert" id="countdown"></span>
-    <button id="fullBtn" type="button">Fullscreen</button>
+    <span class="timer" id="timer"></span>
+    <span class="spacer"></span>
+    <button id="fs" type="button">Fullscreen</button>
   </div>
   <div id="arena">
-    <canvas id="game" aria-label="VoltGrid game board"></canvas>
+    <canvas id="game" aria-label="VoltGrid game"></canvas>
     <div id="overlay"></div>
-    <div id="joystick"></div>
+    <div id="joy"></div>
   </div>
 </div>
 
@@ -109,215 +82,262 @@
 
   const LOGICAL_SIZE = 2000;
   const CELL_SIZE = 20;
-  const GRID_CELLS = LOGICAL_SIZE / CELL_SIZE;
+  const GRID = LOGICAL_SIZE / CELL_SIZE;
   const VOID = 0, CLAIMED = 1, DRAWING = 2;
 
   const PLAYER_SPEED = 360;
-  const BASE_ORB_SPEED = 220;
-  const TARGET_CLAIM = 0.75;
+  const BASE_ORB_SPEED = 210;
 
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
-  const arena = document.getElementById('arena');
-  const overlay = document.getElementById('overlay');
-  const joystick = document.getElementById('joystick');
-
-  const hud = {
-    level: document.getElementById('level'),
-    claimed: document.getElementById('claimed'),
-    score: document.getElementById('score'),
-    high: document.getElementById('high'),
-    lives: document.getElementById('lives'),
-    countdown: document.getElementById('countdown'),
-    fullBtn: document.getElementById('fullBtn')
+  const el = {
+    canvas: document.getElementById('game'),
+    arena: document.getElementById('arena'),
+    overlay: document.getElementById('overlay'),
+    joy: document.getElementById('joy'),
+    fs: document.getElementById('fs'),
+    hud: {
+      level: document.getElementById('level'),
+      claimed: document.getElementById('claimed'),
+      score: document.getElementById('score'),
+      high: document.getElementById('high'),
+      lives: document.getElementById('lives'),
+      timer: document.getElementById('timer')
+    }
   };
+  const ctx = el.canvas.getContext('2d', { alpha: false });
 
   const state = {
     grid: [],
-    drawingTrail: [],
-    drawingSet: new Set(),
+    trail: [],
+    trailSet: new Set(),
     player: { x: 40, y: 40, vx: 0, vy: 0, inVoid: false },
     orbs: [],
     level: 1,
     score: 0,
-    highScore: Number(localStorage.getItem('voltgrid-highscore') || 0),
     lives: 3,
     gameOver: false,
-    shake: 0,
-    particles: [],
-    floatingTexts: [],
+    high: Number(localStorage.getItem('voltgrid-highscore') || 0),
+    pulse: 0,
+    shake: { frames: 0, amp: 0 },
+    shockRumble: { t: 0, amp: 0 },
     shock: null,
     shockTimer: 0,
-    pulse: 0
+    alerts: []
   };
 
-  const input = { up: false, down: false, left: false, right: false, joyX: 0, joyY: 0, touchId: null, centerX: 0, centerY: 0 };
+  const input = {
+    up: false, down: false, left: false, right: false,
+    joyX: 0, joyY: 0, touchId: null, centerX: 0, centerY: 0
+  };
 
-  function cellOf(x, y) {
-    return {
-      cx: Math.max(0, Math.min(GRID_CELLS - 1, Math.floor(x / CELL_SIZE))),
-      cy: Math.max(0, Math.min(GRID_CELLS - 1, Math.floor(y / CELL_SIZE)))
-    };
+  const levelTarget = lvl => Math.min(0.9, 0.75 + (lvl - 1) * 0.05);
+  const orbBaseSpeed = lvl => BASE_ORB_SPEED * Math.pow(1.1, lvl - 1);
+  const orbCount = lvl => 2 + (lvl - 1);
+
+  class ParticleSystem {
+    constructor() { this.items = []; }
+    emit(x, y, cfg, count = 1) {
+      for (let i = 0; i < count; i++) {
+        const a = cfg.angle ? cfg.angle() : Math.random() * Math.PI * 2;
+        const s = cfg.speed ? cfg.speed() : 0;
+        this.items.push({
+          x, y,
+          vx: Math.cos(a) * s,
+          vy: Math.sin(a) * s,
+          life: cfg.life ? cfg.life() : 1,
+          maxLife: cfg.life ? cfg.life(1) : 1,
+          size: cfg.size ? cfg.size() : 3,
+          color: cfg.color || '#00f6ff',
+          alpha: cfg.alpha ?? 1,
+          gravity: cfg.gravity ?? 0,
+          drag: cfg.drag ?? 1,
+          additive: !!cfg.additive,
+          ring: !!cfg.ring,
+          expand: cfg.expand ?? 0,
+          fade: cfg.fade ?? 1
+        });
+      }
+    }
+    update(dt) {
+      this.items = this.items.filter(p => {
+        p.life -= dt;
+        if (p.life <= 0) return false;
+        p.vx *= p.drag; p.vy *= p.drag;
+        p.vy += p.gravity * dt;
+        p.x += p.vx * dt; p.y += p.vy * dt;
+        p.size += p.expand * dt;
+        return true;
+      });
+    }
+    draw(ctx, toScreen) {
+      for (const p of this.items) {
+        const s = toScreen(p.x, p.y);
+        const a = Math.max(0, (p.life / p.maxLife) * p.fade) * p.alpha;
+        ctx.globalCompositeOperation = p.additive ? 'lighter' : 'source-over';
+        ctx.strokeStyle = hexToRgba(p.color, a);
+        ctx.fillStyle = hexToRgba(p.color, a);
+        if (p.ring) {
+          ctx.lineWidth = 2;
+          ctx.beginPath(); ctx.arc(s.x, s.y, Math.max(1, p.size), 0, Math.PI * 2); ctx.stroke();
+        } else {
+          ctx.beginPath(); ctx.arc(s.x, s.y, Math.max(1, p.size), 0, Math.PI * 2); ctx.fill();
+        }
+      }
+      ctx.globalCompositeOperation = 'source-over';
+    }
   }
-  function key(cx, cy) { return (cx << 16) | cy; }
+
+  const particles = new ParticleSystem();
+
+  function hexToRgba(hex, a) {
+    const c = hex.replace('#', '');
+    const n = parseInt(c.length === 3 ? c.split('').map(x => x + x).join('') : c, 16);
+    return `rgba(${(n >> 16) & 255},${(n >> 8) & 255},${n & 255},${a})`;
+  }
+
+  function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+  function cOf(x, y) { return { x: clamp((x / CELL_SIZE) | 0, 0, GRID - 1), y: clamp((y / CELL_SIZE) | 0, 0, GRID - 1) }; }
+  function k(x, y) { return (x << 16) | y; }
 
   function initGrid() {
-    state.grid = Array.from({ length: GRID_CELLS }, (_, y) =>
-      Array.from({ length: GRID_CELLS }, (_, x) => (x === 0 || y === 0 || x === GRID_CELLS - 1 || y === GRID_CELLS - 1) ? CLAIMED : VOID)
+    state.grid = Array.from({ length: GRID }, (_, y) =>
+      Array.from({ length: GRID }, (_, x) => (x === 0 || y === 0 || x === GRID - 1 || y === GRID - 1 ? CLAIMED : VOID))
     );
   }
 
-  function spawnOrb(speed = BASE_ORB_SPEED + (state.level - 1) * 15, x = LOGICAL_SIZE / 2, y = LOGICAL_SIZE / 2) {
-    let tries = 0;
-    while (tries++ < 120) {
-      const c = cellOf(x, y);
-      if (state.grid[c.cy][c.cx] === VOID) break;
+  function spawnOrb(speed = orbBaseSpeed(state.level), px = LOGICAL_SIZE / 2, py = LOGICAL_SIZE / 2) {
+    let x = px, y = py;
+    for (let i = 0; i < 120; i++) {
+      const c = cOf(x, y);
+      if (state.grid[c.y][c.x] === VOID) break;
       x = 100 + Math.random() * (LOGICAL_SIZE - 200);
       y = 100 + Math.random() * (LOGICAL_SIZE - 200);
     }
-    const angle = Math.random() * Math.PI * 2;
-    state.orbs.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, speed });
-  }
-
-  function resetRound(loseLife = false) {
-    if (loseLife) {
-      state.lives -= 1;
-      state.shake = 26;
-      if (state.lives <= 0) {
-        endGame();
-        return;
-      }
-    }
-    state.drawingTrail = [];
-    state.drawingSet.clear();
-    state.shock = null;
-    state.shockTimer = 0;
-    state.player.x = 40; state.player.y = 40;
-    state.player.vx = 0; state.player.vy = 0;
-    state.player.inVoid = false;
-    input.joyX = 0; input.joyY = 0;
-    state.grid.forEach(row => row.forEach((_, i, a) => { if (a[i] === DRAWING) a[i] = VOID; }));
+    const a = Math.random() * Math.PI * 2;
+    state.orbs.push({ x, y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, speed });
   }
 
   function setupLevel() {
     initGrid();
-    state.orbs = [];
-    for (let i = 0; i < Math.min(6, 2 + Math.floor(state.level / 2)); i++) spawnOrb();
+    state.orbs.length = 0;
+    for (let i = 0; i < orbCount(state.level); i++) spawnOrb();
     resetRound(false);
+    state.alerts.push({ text: `LEVEL ${state.level}`, t: 1.2, x: LOGICAL_SIZE / 2, y: 120 });
   }
 
-  function endGame() {
-    state.gameOver = true;
-    overlay.innerHTML = `GAME OVER<br>Score ${Math.floor(state.score)}<br>Press Space / Tap to Restart`;
-    if (state.score > state.highScore) {
-      state.highScore = Math.floor(state.score);
-      localStorage.setItem('voltgrid-highscore', String(state.highScore));
+  function resetRound(loseLife) {
+    if (loseLife) {
+      state.lives -= 1;
+      rumble(18, 8);
+      deathFx(state.player.x, state.player.y);
+      if (state.lives <= 0) return gameOver();
     }
+    for (const row of state.grid) for (let i = 0; i < row.length; i++) if (row[i] === DRAWING) row[i] = VOID;
+    state.trail.length = 0;
+    state.trailSet.clear();
+    state.shock = null;
+    state.shockTimer = 0;
+    state.player.x = 40; state.player.y = 40; state.player.vx = 0; state.player.vy = 0; state.player.inVoid = false;
+    input.joyX = 0; input.joyY = 0;
   }
 
-  function restartGame() {
-    state.level = 1; state.score = 0; state.lives = 3; state.gameOver = false;
-    overlay.textContent = '';
+  function gameOver() {
+    state.gameOver = true;
+    const s = Math.floor(state.score);
+    if (s > state.high) {
+      state.high = s;
+      localStorage.setItem('voltgrid-highscore', String(s));
+    }
+    el.overlay.innerHTML = `SYSTEM FAILURE<br>Score ${s}<br>Tap / Space to reboot`;
+  }
+
+  function restart() {
+    state.level = 1; state.score = 0; state.lives = 3; state.gameOver = false; state.alerts.length = 0;
+    el.overlay.textContent = '';
     setupLevel();
   }
 
-  function claimedPercent() {
-    let c = 0;
-    for (let y = 0; y < GRID_CELLS; y++) for (let x = 0; x < GRID_CELLS; x++) if (state.grid[y][x] === CLAIMED) c++;
-    return c / (GRID_CELLS * GRID_CELLS);
-  }
-
-  function updateHUD() {
-    hud.level.textContent = `Level ${state.level}`;
-    hud.claimed.textContent = `Claimed ${(claimedPercent() * 100).toFixed(1)}%`;
-    hud.score.textContent = `Score ${Math.floor(state.score)}`;
-    hud.high.textContent = `High ${state.highScore}`;
-    hud.lives.textContent = `Lives ${state.lives}`;
-    hud.countdown.textContent = state.shockTimer > 0 ? `⚠ ${state.shockTimer.toFixed(1)}s` : '';
-  }
-
-  function addTrailCell(cx, cy) {
-    const k = key(cx, cy);
-    if (state.drawingSet.has(k)) {
-      resetRound(true);
-      return;
-    }
-    state.drawingSet.add(k);
-    state.drawingTrail.push({ cx, cy });
+  function addTrail(cx, cy) {
+    const id = k(cx, cy);
+    if (state.trailSet.has(id)) return resetRound(true);
+    state.trailSet.add(id);
+    state.trail.push({ x: cx, y: cy });
     state.grid[cy][cx] = DRAWING;
   }
 
-  function finalizePathAndFill() {
-    if (!state.drawingTrail.length) return;
+  function claimedPct() {
+    let c = 0;
+    for (let y = 0; y < GRID; y++) for (let x = 0; x < GRID; x++) if (state.grid[y][x] === CLAIMED) c++;
+    return c / (GRID * GRID);
+  }
 
-    for (const { cx, cy } of state.drawingTrail) state.grid[cy][cx] = CLAIMED;
+  function finalizePath() {
+    if (!state.trail.length) return;
 
-    const visited = Array.from({ length: GRID_CELLS }, () => Array(GRID_CELLS).fill(false));
-    const orbCellSet = new Set(state.orbs.map(o => {
-      const c = cellOf(o.x, o.y);
-      return key(c.cx, c.cy);
-    }));
+    for (const p of state.trail) state.grid[p.y][p.x] = CLAIMED;
 
+    const orbCells = new Set(state.orbs.map(o => { const c = cOf(o.x, o.y); return k(c.x, c.y); }));
+    const visited = Array.from({ length: GRID }, () => Array(GRID).fill(false));
     const regions = [];
-    for (let sy = 0; sy < GRID_CELLS; sy++) {
-      for (let sx = 0; sx < GRID_CELLS; sx++) {
+    const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+
+    for (let sy = 0; sy < GRID; sy++) {
+      for (let sx = 0; sx < GRID; sx++) {
         if (visited[sy][sx] || state.grid[sy][sx] !== VOID) continue;
-        const q = [{ x: sx, y: sy }];
+        const queue = [{ x: sx, y: sy }];
         visited[sy][sx] = true;
         const cells = [];
-        let containsOrb = false;
-        for (let qi = 0; qi < q.length; qi++) {
-          const { x, y } = q[qi];
-          cells.push({ x, y });
-          if (orbCellSet.has(key(x, y))) containsOrb = true;
-          const dirs = [[1,0],[-1,0],[0,1],[0,-1]];
+        let hasOrb = false;
+        for (let i = 0; i < queue.length; i++) {
+          const p = queue[i];
+          cells.push(p);
+          if (orbCells.has(k(p.x, p.y))) hasOrb = true;
           for (const [dx, dy] of dirs) {
-            const nx = x + dx, ny = y + dy;
-            if (nx < 0 || ny < 0 || nx >= GRID_CELLS || ny >= GRID_CELLS) continue;
+            const nx = p.x + dx, ny = p.y + dy;
+            if (nx < 0 || ny < 0 || nx >= GRID || ny >= GRID) continue;
             if (visited[ny][nx] || state.grid[ny][nx] !== VOID) continue;
             visited[ny][nx] = true;
-            q.push({ x: nx, y: ny });
+            queue.push({ x: nx, y: ny });
           }
         }
-        regions.push({ cells, containsOrb });
+        regions.push({ cells, hasOrb });
       }
     }
 
-    const fillRegion = regions
-      .filter(r => !r.containsOrb)
-      .sort((a, b) => a.cells.length - b.cells.length)[0];
-
+    const fill = regions.filter(r => !r.hasOrb).sort((a, b) => a.cells.length - b.cells.length)[0];
     const newlyClaimed = new Set();
-    if (fillRegion) {
-      for (const c of fillRegion.cells) {
-        state.grid[c.y][c.x] = CLAIMED;
-        newlyClaimed.add(key(c.x, c.y));
+    if (fill) {
+      for (const cell of fill.cells) {
+        state.grid[cell.y][cell.x] = CLAIMED;
+        newlyClaimed.add(k(cell.x, cell.y));
       }
-      state.score += fillRegion.cells.length * 3;
+      state.score += fill.cells.length * 3;
+      captureFx(state.player.x, state.player.y);
     }
 
     const before = state.orbs.length;
     state.orbs = state.orbs.filter(o => {
-      const c = cellOf(o.x, o.y);
-      return !newlyClaimed.has(key(c.cx, c.cy));
+      const c = cOf(o.x, o.y);
+      return !newlyClaimed.has(k(c.x, c.y));
     });
-    const killed = before - state.orbs.length;
-    if (killed > 0) {
-      state.score += 5000 * killed;
-      state.shake = 34;
-      state.floatingTexts.push({ text: `+${5000 * killed} Containment Bonus`, x: state.player.x, y: state.player.y - 40, t: 1.6 });
-      for (let i = 0; i < killed; i++) {
-        const center = findVoidCenter();
-        spawnOrb(BASE_ORB_SPEED + state.level * 22 + i * 20, center.x, center.y);
+
+    const trapped = before - state.orbs.length;
+    if (trapped > 0) {
+      state.score += trapped * 4000;
+      rumble(14, 5);
+      const center = findVoidCenter();
+      for (let i = 0; i < trapped; i++) {
+        killFx(center.x, center.y);
+        spawnOrb(orbBaseSpeed(state.level) * 1.3 + i * 25, center.x, center.y);
       }
+      state.alerts.push({ text: `CONTAINMENT x${trapped}`, t: 1.35, x: state.player.x, y: state.player.y - 40 });
     }
 
-    state.drawingTrail = [];
-    state.drawingSet.clear();
+    state.trail.length = 0;
+    state.trailSet.clear();
     state.shock = null;
     state.shockTimer = 0;
 
-    if (claimedPercent() >= TARGET_CLAIM) {
+    if (claimedPct() >= levelTarget(state.level)) {
       state.level += 1;
       state.score += 1500;
       setupLevel();
@@ -325,248 +345,261 @@
   }
 
   function findVoidCenter() {
-    let best = { x: LOGICAL_SIZE / 2, y: LOGICAL_SIZE / 2, d: -1 };
-    for (let y = 1; y < GRID_CELLS - 1; y += 2) {
-      for (let x = 1; x < GRID_CELLS - 1; x += 2) {
+    let best = { x: LOGICAL_SIZE / 2, y: LOGICAL_SIZE / 2, score: -1 };
+    for (let y = 1; y < GRID - 1; y += 2) {
+      for (let x = 1; x < GRID - 1; x += 2) {
         if (state.grid[y][x] !== VOID) continue;
-        let minD = Infinity;
+        let nearest = Infinity;
         for (const o of state.orbs) {
-          const dx = o.x - (x + .5) * CELL_SIZE;
-          const dy = o.y - (y + .5) * CELL_SIZE;
-          minD = Math.min(minD, dx * dx + dy * dy);
+          const dx = o.x - (x + 0.5) * CELL_SIZE;
+          const dy = o.y - (y + 0.5) * CELL_SIZE;
+          nearest = Math.min(nearest, dx * dx + dy * dy);
         }
-        if (minD > best.d) best = { x: (x + .5) * CELL_SIZE, y: (y + .5) * CELL_SIZE, d: minD };
+        if (nearest > best.score) best = { x: (x + 0.5) * CELL_SIZE, y: (y + 0.5) * CELL_SIZE, score: nearest };
       }
     }
     return best;
   }
 
-  function updatePlayer(dt) {
-    const mx = (input.right ? 1 : 0) - (input.left ? 1 : 0) + input.joyX;
-    const my = (input.down ? 1 : 0) - (input.up ? 1 : 0) + input.joyY;
-    const len = Math.hypot(mx, my) || 1;
-    state.player.vx = (mx / len) * PLAYER_SPEED;
-    state.player.vy = (my / len) * PLAYER_SPEED;
-
-    const nx = Math.max(0, Math.min(LOGICAL_SIZE - 1, state.player.x + state.player.vx * dt));
-    const ny = Math.max(0, Math.min(LOGICAL_SIZE - 1, state.player.y + state.player.vy * dt));
-    state.player.x = nx; state.player.y = ny;
-
-    const { cx, cy } = cellOf(nx, ny);
-    const here = state.grid[cy][cx];
-    const inVoidNow = here === VOID || here === DRAWING;
-
-    if (inVoidNow) {
-      if (!state.player.inVoid && state.grid[cy][cx] === VOID) addTrailCell(cx, cy);
-      else if (state.grid[cy][cx] === VOID) addTrailCell(cx, cy);
-      state.player.inVoid = true;
-    } else if (here === CLAIMED && state.player.inVoid) {
-      finalizePathAndFill();
-      state.player.inVoid = false;
-    }
-
-    if (Math.random() < 0.55) {
-      state.particles.push({ x: nx, y: ny, life: .45 + Math.random() * .4, r: 3 + Math.random() * 4 });
-    }
-  }
-
-  function updateOrbs(dt) {
-    for (const orb of state.orbs) {
-      let nx = orb.x + orb.vx * dt;
-      let ny = orb.y + orb.vy * dt;
-
-      const checkBounce = (x, y) => {
-        const c = cellOf(x, y);
-        return state.grid[c.cy][c.cx] === CLAIMED;
-      };
-
-      if (nx <= 0 || nx >= LOGICAL_SIZE - 1 || checkBounce(nx, orb.y)) {
-        orb.vx *= -1; nx = orb.x + orb.vx * dt;
-      }
-      if (ny <= 0 || ny >= LOGICAL_SIZE - 1 || checkBounce(orb.x, ny)) {
-        orb.vy *= -1; ny = orb.y + orb.vy * dt;
-      }
-      orb.x = nx; orb.y = ny;
-
-      const c = cellOf(orb.x, orb.y);
-      if (state.grid[c.cy][c.cx] === DRAWING && !state.shock) {
-        triggerShock(c.cx, c.cy);
-      }
-
-      const dx = orb.x - state.player.x, dy = orb.y - state.player.y;
-      if (Math.hypot(dx, dy) < 22 && !state.player.inVoid) {
-        resetRound(true);
-        return;
-      }
-    }
-  }
-
   function triggerShock(cx, cy) {
-    if (!state.drawingTrail.length) return;
-    let impactIndex = 0;
-    let best = Infinity;
-    for (let i = 0; i < state.drawingTrail.length; i++) {
-      const d = Math.abs(state.drawingTrail[i].cx - cx) + Math.abs(state.drawingTrail[i].cy - cy);
-      if (d < best) { best = d; impactIndex = i; }
+    if (!state.trail.length) return;
+    let idx = 0, dBest = Infinity;
+    for (let i = 0; i < state.trail.length; i++) {
+      const d = Math.abs(state.trail[i].x - cx) + Math.abs(state.trail[i].y - cy);
+      if (d < dBest) { dBest = d; idx = i; }
     }
-    state.shock = { idx: impactIndex, t: 0, speed: PLAYER_SPEED * 1.2 };
-    state.shockTimer = 2.0;
+    state.shock = { idx, speed: PLAYER_SPEED * 1.2, x: 0, y: 0 };
+    state.shockTimer = 2;
+    state.shockRumble.t = 2;
+    state.shockRumble.amp = 1.8;
+    rumble(8, 2.5);
   }
 
   function updateShock(dt) {
     if (!state.shock) return;
-
     state.shockTimer = Math.max(0, state.shockTimer - dt);
 
-    const maxIdx = Math.max(0, state.drawingTrail.length - 1);
-    state.shock.idx = Math.min(maxIdx, state.shock.idx + (state.shock.speed * dt) / CELL_SIZE);
-
-    const i0 = Math.floor(state.shock.idx);
-    const i1 = Math.min(maxIdx, i0 + 1);
-    const f = state.shock.idx - i0;
-    const a = state.drawingTrail[i0] || state.drawingTrail[maxIdx];
-    const b = state.drawingTrail[i1] || a;
-
-    state.shock.x = ((a.cx + (b.cx - a.cx) * f) + 0.5) * CELL_SIZE;
-    state.shock.y = ((a.cy + (b.cy - a.cy) * f) + 0.5) * CELL_SIZE;
-
-    if (Math.hypot(state.shock.x - state.player.x, state.shock.y - state.player.y) < 20) {
-      resetRound(true);
-      return;
-    }
-
-    if (state.shockTimer <= 0 && state.player.inVoid) {
-      resetRound(true);
-      return;
-    }
-
-    if (!state.player.inVoid) {
+    if (!state.player.inVoid || !state.trail.length) {
       state.shock = null;
       state.shockTimer = 0;
+      state.shockRumble.t = 0;
+      return;
+    }
+
+    const pc = cOf(state.player.x, state.player.y);
+    let target = state.trail.length - 1;
+    let best = Infinity;
+    for (let i = 0; i < state.trail.length; i++) {
+      const d = Math.abs(state.trail[i].x - pc.x) + Math.abs(state.trail[i].y - pc.y);
+      if (d < best) { best = d; target = i; }
+    }
+
+    const dir = Math.sign(target - state.shock.idx) || 1;
+    state.shock.idx = clamp(state.shock.idx + dir * (state.shock.speed * dt / CELL_SIZE), 0, state.trail.length - 1);
+
+    const i0 = Math.floor(state.shock.idx);
+    const i1 = Math.min(state.trail.length - 1, i0 + 1);
+    const f = state.shock.idx - i0;
+    const a = state.trail[i0], b = state.trail[i1] || a;
+    state.shock.x = ((a.x + (b.x - a.x) * f) + 0.5) * CELL_SIZE;
+    state.shock.y = ((a.y + (b.y - a.y) * f) + 0.5) * CELL_SIZE;
+
+    if (Math.hypot(state.shock.x - state.player.x, state.shock.y - state.player.y) < 22) return resetRound(true);
+    if (state.shockTimer <= 0 && state.player.inVoid) return resetRound(true);
+  }
+
+  function updatePlayer(dt) {
+    const mx = ((input.right ? 1 : 0) - (input.left ? 1 : 0)) + input.joyX;
+    const my = ((input.down ? 1 : 0) - (input.up ? 1 : 0)) + input.joyY;
+    const m = Math.hypot(mx, my);
+    const nx = m > 0 ? mx / m : 0;
+    const ny = m > 0 ? my / m : 0;
+
+    state.player.vx = nx * PLAYER_SPEED;
+    state.player.vy = ny * PLAYER_SPEED;
+    state.player.x = clamp(state.player.x + state.player.vx * dt, 0, LOGICAL_SIZE - 1);
+    state.player.y = clamp(state.player.y + state.player.vy * dt, 0, LOGICAL_SIZE - 1);
+
+    const c = cOf(state.player.x, state.player.y);
+    const cell = state.grid[c.y][c.x];
+
+    if (cell === VOID || cell === DRAWING) {
+      if (cell === VOID) addTrail(c.x, c.y);
+      state.player.inVoid = true;
+    } else if (cell === CLAIMED && state.player.inVoid) {
+      finalizePath();
+      state.player.inVoid = false;
+    }
+
+    particles.emit(state.player.x, state.player.y, {
+      life: () => 0.2 + Math.random() * 0.25,
+      size: () => 1 + Math.random() * 3,
+      speed: () => Math.random() * 60,
+      color: '#00f6ff',
+      alpha: .55,
+      drag: .92,
+      fade: 0.8,
+      additive: true
+    }, 1);
+  }
+
+  function updateOrbs(dt) {
+    for (const o of state.orbs) {
+      let nx = o.x + o.vx * dt;
+      let ny = o.y + o.vy * dt;
+      const collide = (x, y) => state.grid[cOf(x, y).y][cOf(x, y).x] === CLAIMED;
+
+      if (nx <= 0 || nx >= LOGICAL_SIZE - 1 || collide(nx, o.y)) { o.vx *= -1; nx = o.x + o.vx * dt; }
+      if (ny <= 0 || ny >= LOGICAL_SIZE - 1 || collide(o.x, ny)) { o.vy *= -1; ny = o.y + o.vy * dt; }
+
+      o.x = nx; o.y = ny;
+
+      const c = cOf(o.x, o.y);
+      if (state.grid[c.y][c.x] === DRAWING && !state.shock) triggerShock(c.x, c.y);
+
+      if (!state.player.inVoid && Math.hypot(o.x - state.player.x, o.y - state.player.y) < 21) {
+        return resetRound(true);
+      }
     }
   }
 
   function updateFx(dt) {
-    state.particles = state.particles.filter(p => (p.life -= dt) > 0);
-    state.floatingTexts = state.floatingTexts.filter(t => (t.t -= dt) > 0);
-    if (state.shake > 0) state.shake = Math.max(0, state.shake - 60 * dt);
+    particles.update(dt);
     state.pulse += dt;
+    if (state.shake.frames > 0) state.shake.frames--;
+    if (state.shockRumble.t > 0) state.shockRumble.t = Math.max(0, state.shockRumble.t - dt);
+    state.alerts = state.alerts.filter(a => (a.t -= dt) > 0);
   }
 
-  function resizeCanvas() {
-    const r = arena.getBoundingClientRect();
-    canvas.width = Math.max(320, Math.floor(r.width * devicePixelRatio));
-    canvas.height = Math.max(240, Math.floor(r.height * devicePixelRatio));
+  function rumble(frames, amp) {
+    state.shake.frames = Math.max(state.shake.frames, frames);
+    state.shake.amp = Math.max(state.shake.amp, amp);
+  }
+
+  function captureFx(x, y) {
+    particles.emit(x, y, { life: () => 0.7, size: () => 8, ring: true, expand: 120, color: '#00f6ff', alpha: .75, additive: true }, 2);
+    particles.emit(x, y, { life: () => 0.7 + Math.random() * 0.4, size: () => 2 + Math.random() * 3, speed: () => 120 + Math.random() * 220, color: '#00f6ff', drag: .95, alpha: .75, additive: true }, 50);
+  }
+  function killFx(x, y) {
+    particles.emit(x, y, { life: () => 0.65, size: () => 10, ring: true, expand: 180, color: '#ff2dff', alpha: .9, additive: true }, 1);
+    particles.emit(x, y, { life: () => 0.8 + Math.random() * 0.4, size: () => 2 + Math.random() * 3, speed: () => 130 + Math.random() * 300, color: '#ff2dff', gravity: 40, drag: .93, alpha: .9, additive: true }, 70);
+  }
+  function deathFx(x, y) {
+    particles.emit(x, y, { life: () => 0.7 + Math.random() * 0.6, size: () => 2 + Math.random() * 3, speed: () => 120 + Math.random() * 220, color: '#ff355e', gravity: 100, drag: .9, alpha: .95, additive: true }, 90);
+  }
+
+  function updateHUD() {
+    el.hud.level.textContent = `Level ${state.level} (Goal ${(levelTarget(state.level) * 100).toFixed(0)}%)`;
+    el.hud.claimed.textContent = `Claimed ${(claimedPct() * 100).toFixed(1)}%`;
+    el.hud.score.textContent = `Score ${Math.floor(state.score)}`;
+    el.hud.high.textContent = `High ${state.high}`;
+    el.hud.lives.textContent = `Lives ${state.lives}`;
+    el.hud.timer.textContent = state.shockTimer > 0 ? `⚡ ${state.shockTimer.toFixed(1)}s` : '';
+  }
+
+  function resize() {
+    const r = el.arena.getBoundingClientRect();
+    el.canvas.width = Math.max(320, Math.floor(r.width * devicePixelRatio));
+    el.canvas.height = Math.max(240, Math.floor(r.height * devicePixelRatio));
     ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   }
 
   function toScreen(x, y) {
-    return { x: x / LOGICAL_SIZE * canvas.clientWidth, y: y / LOGICAL_SIZE * canvas.clientHeight };
+    return { x: x / LOGICAL_SIZE * el.canvas.clientWidth, y: y / LOGICAL_SIZE * el.canvas.clientHeight };
   }
 
-  function drawGridPulse() {
-    const step = 44;
-    const alpha = 0.08 + Math.sin(state.pulse * 2.3) * 0.03;
-    ctx.strokeStyle = `rgba(120,150,255,${alpha})`;
+  function drawBackground() {
+    const w = el.canvas.clientWidth, h = el.canvas.clientHeight;
+    ctx.fillStyle = '#050510';
+    ctx.fillRect(0, 0, w, h);
+    const alpha = 0.06 + Math.sin(state.pulse * 2.4) * 0.03;
+    ctx.strokeStyle = `rgba(110,130,255,${alpha})`;
     ctx.lineWidth = 1;
-    for (let x = 0; x < canvas.clientWidth; x += step) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.clientHeight); ctx.stroke(); }
-    for (let y = 0; y < canvas.clientHeight; y += step) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.clientWidth, y); ctx.stroke(); }
+    const sx = Math.max(20, w / 20), sy = Math.max(20, h / 20);
+    for (let x = 0; x < w; x += sx) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); }
+    for (let y = 0; y < h; y += sy) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); }
+  }
+
+  function renderGrid() {
+    const w = el.canvas.clientWidth, h = el.canvas.clientHeight;
+    const cw = w / GRID, ch = h / GRID;
+    for (let y = 0; y < GRID; y++) {
+      for (let x = 0; x < GRID; x++) {
+        const s = state.grid[y][x];
+        if (s === VOID) continue;
+        if (s === CLAIMED) ctx.fillStyle = 'rgba(0,180,255,.2)';
+        else ctx.fillStyle = 'rgba(255,53,94,.9)';
+        ctx.fillRect(x * cw, y * ch, cw + 0.6, ch + 0.6);
+      }
+    }
   }
 
   function render() {
-    const cw = canvas.clientWidth, ch = canvas.clientHeight;
-    ctx.clearRect(0, 0, cw, ch);
+    const w = el.canvas.clientWidth, h = el.canvas.clientHeight;
+    ctx.clearRect(0, 0, w, h);
 
-    ctx.save();
-    if (state.shake > 0) {
-      const s = state.shake * 0.2;
-      ctx.translate((Math.random() - 0.5) * s, (Math.random() - 0.5) * s);
-    }
+    const extraRumble = state.shockRumble.t > 0 ? (Math.sin(state.pulse * 60) * state.shockRumble.amp) : 0;
+    const shakeX = state.shake.frames > 0 ? (Math.random() - 0.5) * state.shake.amp : 0;
+    const shakeY = state.shake.frames > 0 ? (Math.random() - 0.5) * state.shake.amp : 0;
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, shakeX + extraRumble, shakeY - extraRumble);
 
-    drawGridPulse();
-
-    for (let y = 0; y < GRID_CELLS; y++) {
-      for (let x = 0; x < GRID_CELLS; x++) {
-        const cell = state.grid[y][x];
-        if (cell === VOID) continue;
-        const sx = x / GRID_CELLS * cw;
-        const sy = y / GRID_CELLS * ch;
-        const sw = cw / GRID_CELLS + 1;
-        const sh = ch / GRID_CELLS + 1;
-        if (cell === CLAIMED) {
-          ctx.fillStyle = 'rgba(20, 120, 190, 0.28)';
-          ctx.fillRect(sx, sy, sw, sh);
-        } else if (cell === DRAWING) {
-          ctx.fillStyle = 'rgba(255, 53, 94, 0.9)';
-          ctx.fillRect(sx, sy, sw, sh);
-        }
-      }
-    }
-
-    for (const p of state.particles) {
-      const s = toScreen(p.x, p.y);
-      const a = Math.max(0, p.life / 0.8);
-      ctx.fillStyle = `rgba(120,255,255,${a})`;
-      ctx.beginPath(); ctx.arc(s.x, s.y, p.r * a, 0, Math.PI * 2); ctx.fill();
-    }
+    drawBackground();
+    renderGrid();
 
     for (const orb of state.orbs) {
       const s = toScreen(orb.x, orb.y);
-      ctx.shadowBlur = 18;
-      ctx.shadowColor = 'rgba(255, 45, 255, .9)';
+      ctx.shadowBlur = 20; ctx.shadowColor = '#ff2dff';
       ctx.fillStyle = '#ff2dff';
-      ctx.beginPath(); ctx.arc(s.x, s.y, 9, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(s.x, s.y, 10, 0, Math.PI * 2); ctx.fill();
       ctx.shadowBlur = 0;
-      ctx.strokeStyle = 'rgba(255, 60, 80, .95)';
+      ctx.strokeStyle = '#ff355e';
+      ctx.lineWidth = 2;
       ctx.beginPath(); ctx.moveTo(s.x - 13, s.y); ctx.lineTo(s.x + 13, s.y); ctx.stroke();
     }
 
     if (state.shock) {
       const s = toScreen(state.shock.x, state.shock.y);
-      const r = 8 + Math.sin(state.pulse * 24) * 3;
-      ctx.shadowBlur = 20; ctx.shadowColor = '#fff';
-      ctx.fillStyle = Math.sin(state.pulse * 30) > 0 ? '#fff' : '#ff355e';
-      ctx.beginPath(); ctx.arc(s.x, s.y, r, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 20; ctx.shadowColor = '#ff355e';
+      ctx.fillStyle = Math.sin(state.pulse * 45) > 0 ? '#ffffff' : '#ff355e';
+      ctx.beginPath(); ctx.arc(s.x, s.y, 8 + Math.sin(state.pulse * 20) * 2, 0, Math.PI * 2); ctx.fill();
       ctx.shadowBlur = 0;
     }
 
-    const ghost = toScreen(state.player.x, state.player.y);
-    ctx.save();
-    ctx.shadowBlur = 20;
-    ctx.shadowColor = '#00f6ff';
-    ctx.font = '32px "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('👻', ghost.x, ghost.y);
-    ctx.restore();
+    particles.draw(ctx, toScreen);
 
-    for (const t of state.floatingTexts) {
-      const s = toScreen(t.x, t.y - (1 - t.t) * 40);
-      ctx.fillStyle = `rgba(255, 45, 255, ${Math.min(1, t.t)})`;
-      ctx.font = '700 20px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(t.text, s.x, s.y);
+    const g = toScreen(state.player.x, state.player.y);
+    ctx.font = '34px "Apple Color Emoji", "Segoe UI Emoji", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = '#00f6ff'; ctx.shadowBlur = 24;
+    ctx.fillText('👻', g.x, g.y);
+    ctx.shadowBlur = 0;
+
+    for (const a of state.alerts) {
+      const s = toScreen(a.x, a.y - (1 - a.t) * 40);
+      ctx.fillStyle = `rgba(255,45,255,${Math.min(1, a.t)})`;
+      ctx.font = '800 22px system-ui';
+      ctx.fillText(a.text, s.x, s.y);
     }
 
-    ctx.restore();
+    ctx.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
   }
 
-  function loop(ts) {
-    if (!loop.last) loop.last = ts;
-    const dt = Math.min(0.033, (ts - loop.last) / 1000);
-    loop.last = ts;
+  function frame(ts) {
+    frame.last ??= ts;
+    const dt = Math.min(0.033, (ts - frame.last) / 1000);
+    frame.last = ts;
 
     if (!state.gameOver) {
       updatePlayer(dt);
       updateOrbs(dt);
       updateShock(dt);
       updateFx(dt);
-      state.score += dt * 6;
+      state.score += dt * 8;
     }
 
     updateHUD();
     render();
-    requestAnimationFrame(loop);
+    requestAnimationFrame(frame);
   }
 
   function onKey(v, e) {
@@ -574,71 +607,87 @@
     if (e.code === 'ArrowDown' || e.code === 'KeyS') input.down = v;
     if (e.code === 'ArrowLeft' || e.code === 'KeyA') input.left = v;
     if (e.code === 'ArrowRight' || e.code === 'KeyD') input.right = v;
-    if (e.code === 'Space' && v && state.gameOver) restartGame();
+    if (e.code === 'Space' && v && state.gameOver) restart();
   }
 
-  function setJoystickVisual(dx = 0, dy = 0) {
-    joystick.style.setProperty('--knobX', `${dx}px`);
-    joystick.style.setProperty('--knobY', `${dy}px`);
+  function setJoyKnob(x = 0, y = 0) {
+    el.joy.style.setProperty('--jx', `${x}px`);
+    el.joy.style.setProperty('--jy', `${y}px`);
   }
 
-  function handleTouchStart(e) {
-    if (state.gameOver) { restartGame(); return; }
+  function onTouchStart(e) {
+    if (state.gameOver) return restart();
     const t = e.changedTouches[0];
     input.touchId = t.identifier;
     input.centerX = t.clientX; input.centerY = t.clientY;
-    joystick.style.display = 'block';
-    joystick.style.left = `${input.centerX}px`;
-    joystick.style.top = `${input.centerY}px`;
-    setJoystickVisual(0, 0);
+    el.joy.style.display = 'block';
+    el.joy.style.left = `${t.clientX}px`; el.joy.style.top = `${t.clientY}px`;
+    setJoyKnob(0, 0);
   }
 
-  function handleTouchMove(e) {
+  function onTouchMove(e) {
     for (const t of e.changedTouches) {
       if (t.identifier !== input.touchId) continue;
       const dx = t.clientX - input.centerX;
       const dy = t.clientY - input.centerY;
       const maxR = 45;
-      const len = Math.hypot(dx, dy) || 1;
-      const clamped = Math.min(maxR, len);
-      const ndx = dx / len * clamped;
-      const ndy = dy / len * clamped;
-      setJoystickVisual(ndx, ndy);
-      input.joyX = ndx / maxR;
-      input.joyY = ndy / maxR;
+      const d = Math.hypot(dx, dy);
+      const clamped = Math.min(maxR, d || 1);
+      const ndx = dx / (d || 1) * clamped;
+      const ndy = dy / (d || 1) * clamped;
+      setJoyKnob(ndx, ndy);
+
+      const mag = clamped / maxR;
+      const gain = mag < 0.18 ? 0 : 1; // small deliberate swipe reaches keyboard-equivalent speed
+      input.joyX = (ndx / maxR) * gain;
+      input.joyY = (ndy / maxR) * gain;
       e.preventDefault();
     }
   }
 
-  function handleTouchEnd(e) {
+  function onTouchEnd(e) {
     for (const t of e.changedTouches) {
       if (t.identifier !== input.touchId) continue;
-      input.touchId = null;
-      input.joyX = 0; input.joyY = 0;
-      joystick.style.display = 'none';
-      setJoystickVisual(0, 0);
+      input.touchId = null; input.joyX = 0; input.joyY = 0;
+      el.joy.style.display = 'none';
+      setJoyKnob(0, 0);
     }
   }
 
-  function bindInput() {
+  function bind() {
+    window.addEventListener('resize', resize);
     window.addEventListener('keydown', e => onKey(true, e));
     window.addEventListener('keyup', e => onKey(false, e));
-    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-    canvas.addEventListener('touchend', handleTouchEnd);
-    canvas.addEventListener('touchcancel', handleTouchEnd);
-    canvas.addEventListener('pointerdown', () => { if (state.gameOver) restartGame(); });
-    hud.fullBtn.addEventListener('click', async () => {
+
+    el.canvas.addEventListener('pointerdown', () => { if (state.gameOver) restart(); });
+    el.canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+    el.canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+    el.canvas.addEventListener('touchend', onTouchEnd);
+    el.canvas.addEventListener('touchcancel', onTouchEnd);
+
+    el.fs.addEventListener('click', async () => {
       if (!document.fullscreenElement) await document.documentElement.requestFullscreen?.();
       else await document.exitFullscreen?.();
     });
-    window.addEventListener('resize', resizeCanvas);
   }
 
-  bindInput();
+  function initPwaHints() {
+    const manifest = {
+      name: 'VoltGrid', short_name: 'VoltGrid', display: 'standalone', start_url: '.',
+      background_color: '#050510', theme_color: '#050510',
+      icons: [{ src: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><text y="1em" font-size="100">👻</text></svg>', sizes: '128x128', type: 'image/svg+xml' }]
+    };
+    const l = document.createElement('link');
+    l.rel = 'manifest';
+    l.href = `data:application/manifest+json,${encodeURIComponent(JSON.stringify(manifest))}`;
+    document.head.appendChild(l);
+  }
+
+  bind();
+  initPwaHints();
   setupLevel();
-  resizeCanvas();
-  requestAnimationFrame(loop);
+  resize();
+  requestAnimationFrame(frame);
 })();
 </script>
 </body>
