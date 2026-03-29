@@ -1,6 +1,15 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type MouseEvent,
+  type PointerEvent,
+  type ReactNode,
+  type TouchEvent,
+} from 'react';
 import { VoltGridEngine } from './engine';
 import { renderVoltGrid } from './renderer';
 import type { Direction, GameSnapshot, Phase } from './types';
@@ -14,19 +23,66 @@ export default function VoltGrid() {
   const lastTimeRef = useRef(0);
   const dirRef = useRef<Direction>('none');
   const touchRef = useRef<{ active: boolean; startX: number; startY: number; id: number | null }>({
-    active: false, startX: 0, startY: 0, id: null,
+    active: false,
+    startX: 0,
+    startY: 0,
+    id: null,
   });
 
   const [snap, setSnap] = useState<GameSnapshot>({
-    score: 0, highScore: 0, lives: 3, level: 1,
-    capturedPct: 0, phase: 'menu', fuseActive: false,
-    fuseTimer: 0, drawing: false,
+    score: 0,
+    highScore: 0,
+    lives: 3,
+    level: 1,
+    capturedPct: 0,
+    phase: 'menu',
+    fuseActive: false,
+    fuseTimer: 0,
+    drawing: false,
   });
 
   const getEngine = useCallback(() => {
     if (!engineRef.current) engineRef.current = new VoltGridEngine();
     return engineRef.current;
   }, []);
+
+  const syncSnapshot = useCallback(() => {
+    const engine = getEngine();
+    const next = engine.getSnapshot();
+
+    setSnap(prev => {
+      if (
+        prev.score === next.score &&
+        prev.highScore === next.highScore &&
+        prev.lives === next.lives &&
+        prev.level === next.level &&
+        prev.capturedPct === next.capturedPct &&
+        prev.phase === next.phase &&
+        prev.fuseActive === next.fuseActive &&
+        Math.abs(prev.fuseTimer - next.fuseTimer) < 50 &&
+        prev.drawing === next.drawing
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [getEngine]);
+
+  const overlayVisible =
+    snap.phase === 'menu' ||
+    snap.phase === 'gameover' ||
+    snap.phase === 'levelup';
+
+  const startGame = useCallback((e?: PointerEvent | MouseEvent | TouchEvent) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+
+    const engine = getEngine();
+    engine.startGame();
+
+    const next = engine.getSnapshot();
+    setSnap(next);
+  }, [getEngine]);
 
   // ─── Game loop ─────────────────────────────────────────────
   useEffect(() => {
@@ -39,34 +95,17 @@ export default function VoltGrid() {
       lastTimeRef.current = ts;
 
       engine.update(dt);
-
-      // Only trigger React re-render when snapshot values actually change
-      const newSnap = engine.getSnapshot();
-      setSnap(prev => {
-        if (
-          prev.score === newSnap.score &&
-          prev.highScore === newSnap.highScore &&
-          prev.lives === newSnap.lives &&
-          prev.level === newSnap.level &&
-          prev.capturedPct === newSnap.capturedPct &&
-          prev.phase === newSnap.phase &&
-          prev.fuseActive === newSnap.fuseActive &&
-          Math.abs(prev.fuseTimer - newSnap.fuseTimer) < 50 &&
-          prev.drawing === newSnap.drawing
-        ) {
-          return prev; // Same reference → no re-render
-        }
-        return newSnap;
-      });
+      syncSnapshot();
 
       renderVoltGrid(canvas, engine, ts);
       animRef.current = requestAnimationFrame(loop);
     };
+
     lastTimeRef.current = performance.now();
     animRef.current = requestAnimationFrame(loop);
 
     return () => cancelAnimationFrame(animRef.current);
-  }, [getEngine]);
+  }, [getEngine, syncSnapshot]);
 
   // ─── Keyboard ──────────────────────────────────────────────
   useEffect(() => {
@@ -75,21 +114,41 @@ export default function VoltGrid() {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (engine.phase === 'menu' || engine.phase === 'gameover') {
         if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
           engine.startGame();
-          setSnap(engine.getSnapshot()); // Force immediate re-render
+          setSnap(engine.getSnapshot());
           return;
         }
       }
+
       if (engine.phase !== 'playing') return;
 
       let dir: Direction = 'none';
       switch (e.key) {
-        case 'ArrowUp': case 'w': case 'W': dir = 'up'; break;
-        case 'ArrowDown': case 's': case 'S': dir = 'down'; break;
-        case 'ArrowLeft': case 'a': case 'A': dir = 'left'; break;
-        case 'ArrowRight': case 'd': case 'D': dir = 'right'; break;
-        default: return;
+        case 'ArrowUp':
+        case 'w':
+        case 'W':
+          dir = 'up';
+          break;
+        case 'ArrowDown':
+        case 's':
+        case 'S':
+          dir = 'down';
+          break;
+        case 'ArrowLeft':
+        case 'a':
+        case 'A':
+          dir = 'left';
+          break;
+        case 'ArrowRight':
+        case 'd':
+        case 'D':
+          dir = 'right';
+          break;
+        default:
+          return;
       }
+
       engine.setDirection(dir);
       dirRef.current = dir;
       e.preventDefault();
@@ -97,11 +156,20 @@ export default function VoltGrid() {
 
     const handleKeyUp = (e: KeyboardEvent) => {
       const keyDirMap: Record<string, Direction> = {
-        ArrowUp: 'up', w: 'up', W: 'up',
-        ArrowDown: 'down', s: 'down', S: 'down',
-        ArrowLeft: 'left', a: 'left', A: 'left',
-        ArrowRight: 'right', d: 'right', D: 'right',
+        ArrowUp: 'up',
+        w: 'up',
+        W: 'up',
+        ArrowDown: 'down',
+        s: 'down',
+        S: 'down',
+        ArrowLeft: 'left',
+        a: 'left',
+        A: 'left',
+        ArrowRight: 'right',
+        d: 'right',
+        D: 'right',
       };
+
       if (keyDirMap[e.key] && dirRef.current === keyDirMap[e.key]) {
         engine.setDirection('none');
         dirRef.current = 'none';
@@ -110,6 +178,7 @@ export default function VoltGrid() {
 
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
+
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
@@ -117,21 +186,22 @@ export default function VoltGrid() {
   }, [getEngine]);
 
   // ─── Touch (dynamic joystick) ──────────────────────────────
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+  const handleTouchStart = useCallback((e: TouchEvent<HTMLDivElement>) => {
     const engine = getEngine();
-    if (engine.phase === 'menu' || engine.phase === 'gameover') {
-      engine.startGame();
-      setSnap(engine.getSnapshot()); // Force immediate re-render
-      return;
-    }
     if (engine.phase !== 'playing') return;
 
     const touch = e.touches[0];
-    touchRef.current = { active: true, startX: touch.clientX, startY: touch.clientY, id: touch.identifier };
+    touchRef.current = {
+      active: true,
+      startX: touch.clientX,
+      startY: touch.clientY,
+      id: touch.identifier,
+    };
+
     e.preventDefault();
   }, [getEngine]);
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+  const handleTouchMove = useCallback((e: TouchEvent<HTMLDivElement>) => {
     const engine = getEngine();
     if (!touchRef.current.active) return;
 
@@ -147,35 +217,31 @@ export default function VoltGrid() {
       return;
     }
 
-    const dir: Direction = Math.abs(dx) > Math.abs(dy)
-      ? (dx > 0 ? 'right' : 'left')
-      : (dy > 0 ? 'down' : 'up');
+    const dir: Direction =
+      Math.abs(dx) > Math.abs(dy)
+        ? (dx > 0 ? 'right' : 'left')
+        : (dy > 0 ? 'down' : 'up');
+
     engine.setDirection(dir);
     dirRef.current = dir;
     e.preventDefault();
   }, [getEngine]);
 
-  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+  const handleTouchEnd = useCallback((e: TouchEvent<HTMLDivElement>) => {
     touchRef.current.active = false;
     getEngine().setDirection('none');
     dirRef.current = 'none';
     e.preventDefault();
   }, [getEngine]);
 
-  const startGame = useCallback(() => {
-    const engine = getEngine();
-    engine.startGame();
-    setSnap(engine.getSnapshot()); // Force immediate re-render to dismiss overlay
-  }, [getEngine]);
-
-  const phaseIs = (...phases: Phase[]) => phases.includes(snap.phase);
-
   return (
     <div
       style={{
-        width: '100vw', height: '100dvh',
+        width: '100vw',
+        height: '100dvh',
         background: '#05050a',
-        display: 'flex', flexDirection: 'column',
+        display: 'flex',
+        flexDirection: 'column',
         fontFamily: "'Courier New', monospace",
         overflow: 'hidden',
         userSelect: 'none',
@@ -184,13 +250,22 @@ export default function VoltGrid() {
       }}
     >
       {/* ─── HUD ─────────────────────────────────────────────── */}
-      <div style={{
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: 'max(env(safe-area-inset-top, 6px), 6px) 12px 6px',
-        background: 'linear-gradient(180deg, rgba(0,20,40,0.92) 0%, transparent 100%)',
-        color: '#0ff', fontSize: 12, letterSpacing: 2, zIndex: 10,
-        flexShrink: 0, flexWrap: 'wrap', gap: '4px 16px',
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          padding: 'max(env(safe-area-inset-top, 6px), 6px) 12px 6px',
+          background: 'linear-gradient(180deg, rgba(0,20,40,0.92) 0%, transparent 100%)',
+          color: '#0ff',
+          fontSize: 12,
+          letterSpacing: 2,
+          zIndex: 10,
+          flexShrink: 0,
+          flexWrap: 'wrap',
+          gap: '4px 16px',
+        }}
+      >
         <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
           <span style={{ color: '#f0f', fontWeight: 'bold', fontSize: 11, textTransform: 'uppercase' }}>
             LVL {snap.level}
@@ -202,18 +277,22 @@ export default function VoltGrid() {
             HI {snap.highScore.toLocaleString()}
           </span>
         </div>
+
         <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
           <span>{snap.capturedPct}% / {TARGET_PCT}%</span>
           <span style={{ color: '#f44' }}>
             {'♥'.repeat(Math.max(0, snap.lives))}
             <span style={{ opacity: 0.2 }}>{'♥'.repeat(Math.max(0, 3 - snap.lives))}</span>
           </span>
+
           {snap.fuseActive && (
-            <span style={{
-              color: '#f80',
-              animation: 'pulse 0.3s infinite',
-              fontWeight: 'bold',
-            }}>
+            <span
+              style={{
+                color: '#f80',
+                animation: 'pulse 0.3s infinite',
+                fontWeight: 'bold',
+              }}
+            >
               ⚡ {((2000 - snap.fuseTimer) / 1000).toFixed(1)}s
             </span>
           )}
@@ -223,17 +302,27 @@ export default function VoltGrid() {
       {/* ─── Game Canvas ─────────────────────────────────────── */}
       <div
         style={{
-          flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center',
-          position: 'relative', overflow: 'hidden',
+          flex: 1,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          position: 'relative',
+          overflow: 'hidden',
         }}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onTouchCancel={handleTouchEnd}
+        onTouchStart={overlayVisible ? undefined : handleTouchStart}
+        onTouchMove={overlayVisible ? undefined : handleTouchMove}
+        onTouchEnd={overlayVisible ? undefined : handleTouchEnd}
+        onTouchCancel={overlayVisible ? undefined : handleTouchEnd}
       >
         <canvas
           ref={canvasRef}
-          style={{ width: '100%', height: '100%', display: 'block', imageRendering: 'pixelated' }}
+          style={{
+            width: '100%',
+            height: '100%',
+            display: 'block',
+            imageRendering: 'pixelated',
+            pointerEvents: overlayVisible ? 'none' : 'auto',
+          }}
         />
 
         {/* ─── Menu Overlay ──────────────────────────────────── */}
@@ -241,70 +330,126 @@ export default function VoltGrid() {
           <Overlay>
             <Title>VOLTGRID</Title>
             <Subtitle>Claim the Void · Contain the Storm</Subtitle>
-            <ActionButton onClick={startGame} color="#0ff">Start</ActionButton>
+            <ActionButton onPress={startGame} color="#0ff">Start</ActionButton>
             <Instructions />
           </Overlay>
         )}
 
-        {/* ─── Game Over Overlay ──────────────────────────────── */}
+        {/* ─── Game Over Overlay ─────────────────────────────── */}
         {snap.phase === 'gameover' && (
           <Overlay>
-            <div style={{ fontSize: 40, fontWeight: 'bold', color: '#f44', textShadow: '0 0 28px rgba(255,50,50,0.5)', marginBottom: 12, letterSpacing: 5 }}>
+            <div
+              style={{
+                fontSize: 40,
+                fontWeight: 'bold',
+                color: '#f44',
+                textShadow: '0 0 28px rgba(255,50,50,0.5)',
+                marginBottom: 12,
+                letterSpacing: 5,
+              }}
+            >
               GRID FAILURE
             </div>
+
             <div style={{ color: '#888', fontSize: 13, letterSpacing: 2, marginBottom: 6 }}>
               LEVEL {snap.level} · {snap.capturedPct}% CLAIMED
             </div>
+
             <div style={{ color: '#fff', fontSize: 26, letterSpacing: 4, marginBottom: 8 }}>
               {snap.score.toLocaleString()}
             </div>
+
             {snap.score >= snap.highScore && snap.score > 0 && (
-              <div style={{ color: '#ff0', fontSize: 13, letterSpacing: 3, marginBottom: 16, animation: 'pulse 1s infinite' }}>
+              <div
+                style={{
+                  color: '#ff0',
+                  fontSize: 13,
+                  letterSpacing: 3,
+                  marginBottom: 16,
+                  animation: 'pulse 1s infinite',
+                }}
+              >
                 ★ NEW HIGH SCORE ★
               </div>
             )}
-            <ActionButton onClick={startGame} color="#f44">Retry</ActionButton>
+
+            <ActionButton onPress={startGame} color="#f44">Retry</ActionButton>
           </Overlay>
         )}
 
-        {/* ─── Level Up Overlay ───────────────────────────────── */}
+        {/* ─── Level Up Overlay ──────────────────────────────── */}
         {snap.phase === 'levelup' && (
           <Overlay dim>
-            <div style={{ fontSize: 44, fontWeight: 'bold', color: '#0f0', textShadow: '0 0 36px rgba(0,255,0,0.5)', animation: 'pulse 0.5s infinite', letterSpacing: 5 }}>
+            <div
+              style={{
+                fontSize: 44,
+                fontWeight: 'bold',
+                color: '#0f0',
+                textShadow: '0 0 36px rgba(0,255,0,0.5)',
+                animation: 'pulse 0.5s infinite',
+                letterSpacing: 5,
+              }}
+            >
               SECTOR CLEARED
             </div>
+
             <div style={{ color: '#0ff', fontSize: 17, letterSpacing: 3, marginTop: 10 }}>
               ENTERING LEVEL {snap.level + 1}
             </div>
           </Overlay>
         )}
 
-        {/* ─── Death Flash ────────────────────────────────────── */}
+        {/* ─── Death Flash ───────────────────────────────────── */}
         {snap.phase === 'dead' && snap.lives > 0 && (
-          <div style={{
-            position: 'absolute', inset: 0,
-            display: 'flex', justifyContent: 'center', alignItems: 'center',
-            zIndex: 15, pointerEvents: 'none',
-          }}>
-            <div style={{ fontSize: 28, color: '#f44', fontWeight: 'bold', letterSpacing: 4, textShadow: '0 0 18px #f00', opacity: 0.85 }}>
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 15,
+              pointerEvents: 'none',
+            }}
+          >
+            <div
+              style={{
+                fontSize: 28,
+                color: '#f44',
+                fontWeight: 'bold',
+                letterSpacing: 4,
+                textShadow: '0 0 18px #f00',
+                opacity: 0.85,
+              }}
+            >
               DEREZZ
             </div>
           </div>
         )}
       </div>
 
-      {/* ─── Status Bar ──────────────────────────────────────── */}
-      <div style={{
-        display: 'flex', justifyContent: 'center', alignItems: 'center',
-        padding: '4px 12px max(env(safe-area-inset-bottom, 4px), 4px)',
-        background: 'linear-gradient(0deg, rgba(0,20,40,0.92) 0%, transparent 100%)',
-        color: '#444', fontSize: 10, letterSpacing: 2, zIndex: 10,
-        flexShrink: 0, gap: 14,
-      }}>
+      {/* ─── Status Bar ─────────────────────────────────────── */}
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: '4px 12px max(env(safe-area-inset-bottom, 4px), 4px)',
+          background: 'linear-gradient(0deg, rgba(0,20,40,0.92) 0%, transparent 100%)',
+          color: '#444',
+          fontSize: 10,
+          letterSpacing: 2,
+          zIndex: 10,
+          flexShrink: 0,
+          gap: 14,
+        }}
+      >
         <span>VOLTGRID</span>
         <span>·</span>
         <span style={{ color: snap.drawing ? '#f0f' : '#0ff' }}>
-          {snap.phase === 'playing' ? (snap.drawing ? '▸ DRAWING' : '▸ SAFE') : snap.phase.toUpperCase()}
+          {snap.phase === 'playing'
+            ? (snap.drawing ? '▸ DRAWING' : '▸ SAFE')
+            : snap.phase.toUpperCase()}
         </span>
       </div>
 
@@ -318,49 +463,76 @@ export default function VoltGrid() {
   );
 }
 
-// ─── Shared UI Components ────────────────────────────────────────
-
-function Overlay({ children, dim }: { children: React.ReactNode; dim?: boolean }) {
+function Overlay({ children, dim }: { children: ReactNode; dim?: boolean }) {
   return (
-    <div style={{
-      position: 'absolute', inset: 0,
-      display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center',
-      background: dim ? 'rgba(5,5,10,0.7)' : 'rgba(5,5,10,0.92)',
-      zIndex: 20,
-    }}>
+    <div
+      style={{
+        position: 'absolute',
+        inset: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        background: dim ? 'rgba(5,5,10,0.7)' : 'rgba(5,5,10,0.92)',
+        zIndex: 20,
+        pointerEvents: 'auto',
+      }}
+      onPointerDown={(e) => e.stopPropagation()}
+      onTouchStart={(e) => e.stopPropagation()}
+    >
       {children}
     </div>
   );
 }
 
-function Title({ children }: { children: React.ReactNode }) {
+function Title({ children }: { children: ReactNode }) {
   return (
-    <div style={{
-      fontSize: 'clamp(36px, 8vw, 56px)', fontWeight: 'bold', letterSpacing: 8,
-      background: 'linear-gradient(135deg, #0ff, #f0f, #ff0)',
-      WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent',
-      marginBottom: 6,
-    }}>
+    <div
+      style={{
+        fontSize: 'clamp(36px, 8vw, 56px)',
+        fontWeight: 'bold',
+        letterSpacing: 8,
+        background: 'linear-gradient(135deg, #0ff, #f0f, #ff0)',
+        WebkitBackgroundClip: 'text',
+        WebkitTextFillColor: 'transparent',
+        marginBottom: 6,
+      }}
+    >
       {children}
     </div>
   );
 }
 
-function Subtitle({ children }: { children: React.ReactNode }) {
+function Subtitle({ children }: { children: ReactNode }) {
   return (
-    <div style={{
-      color: '#888', fontSize: 'clamp(11px, 2vw, 14px)', letterSpacing: 3,
-      marginBottom: 32, textTransform: 'uppercase',
-    }}>
+    <div
+      style={{
+        color: '#888',
+        fontSize: 'clamp(11px, 2vw, 14px)',
+        letterSpacing: 3,
+        marginBottom: 32,
+        textTransform: 'uppercase',
+      }}
+    >
       {children}
     </div>
   );
 }
 
-function ActionButton({ children, onClick, color }: { children: React.ReactNode; onClick: () => void; color: string }) {
+function ActionButton({
+  children,
+  onPress,
+  color,
+}: {
+  children: ReactNode;
+  onPress: (e?: PointerEvent | MouseEvent) => void;
+  color: string;
+}) {
   return (
     <button
-      onClick={onClick}
+      type="button"
+      onPointerDown={onPress}
+      onClick={(e) => e.preventDefault()}
       style={{
         background: 'transparent',
         border: `2px solid ${color}`,
@@ -376,14 +548,14 @@ function ActionButton({ children, onClick, color }: { children: React.ReactNode;
         transition: 'all 0.15s',
       }}
       onMouseEnter={e => {
-        (e.target as HTMLButtonElement).style.background = color;
-        (e.target as HTMLButtonElement).style.color = '#000';
-        (e.target as HTMLButtonElement).style.boxShadow = `0 0 28px ${color}66`;
+        e.currentTarget.style.background = color;
+        e.currentTarget.style.color = '#000';
+        e.currentTarget.style.boxShadow = `0 0 28px ${color}66`;
       }}
       onMouseLeave={e => {
-        (e.target as HTMLButtonElement).style.background = 'transparent';
-        (e.target as HTMLButtonElement).style.color = color;
-        (e.target as HTMLButtonElement).style.boxShadow = 'none';
+        e.currentTarget.style.background = 'transparent';
+        e.currentTarget.style.color = color;
+        e.currentTarget.style.boxShadow = 'none';
       }}
     >
       {children}
@@ -393,10 +565,17 @@ function ActionButton({ children, onClick, color }: { children: React.ReactNode;
 
 function Instructions() {
   return (
-    <div style={{
-      color: '#555', fontSize: 'clamp(10px, 1.6vw, 12px)', textAlign: 'center',
-      lineHeight: 2, letterSpacing: 1, maxWidth: 380, padding: '0 16px',
-    }}>
+    <div
+      style={{
+        color: '#555',
+        fontSize: 'clamp(10px, 1.6vw, 12px)',
+        textAlign: 'center',
+        lineHeight: 2,
+        letterSpacing: 1,
+        maxWidth: 380,
+        padding: '0 16px',
+      }}
+    >
       <div style={{ color: '#0ff', marginBottom: 6 }}>⌨ WASD / ARROWS · 📱 TOUCH & DRAG</div>
       <div>Draw lines across the void to capture territory</div>
       <div>Enclose a <span style={{ color: '#f80' }}>Volt Orb</span> for 5,000pt containment kill</div>
