@@ -39,7 +39,26 @@ export default function VoltGrid() {
       lastTimeRef.current = ts;
 
       engine.update(dt);
-      setSnap(engine.getSnapshot());
+
+      // Only trigger React re-render when snapshot values actually change
+      const newSnap = engine.getSnapshot();
+      setSnap(prev => {
+        if (
+          prev.score === newSnap.score &&
+          prev.highScore === newSnap.highScore &&
+          prev.lives === newSnap.lives &&
+          prev.level === newSnap.level &&
+          prev.capturedPct === newSnap.capturedPct &&
+          prev.phase === newSnap.phase &&
+          prev.fuseActive === newSnap.fuseActive &&
+          Math.abs(prev.fuseTimer - newSnap.fuseTimer) < 50 &&
+          prev.drawing === newSnap.drawing
+        ) {
+          return prev; // Same reference → no re-render
+        }
+        return newSnap;
+      });
+
       renderVoltGrid(canvas, engine, ts);
       animRef.current = requestAnimationFrame(loop);
     };
@@ -55,7 +74,11 @@ export default function VoltGrid() {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (engine.phase === 'menu' || engine.phase === 'gameover') {
-        if (e.key === 'Enter' || e.key === ' ') { engine.startGame(); return; }
+        if (e.key === 'Enter' || e.key === ' ') {
+          engine.startGame();
+          setSnap(engine.getSnapshot()); // Force immediate re-render
+          return;
+        }
       }
       if (engine.phase !== 'playing') return;
 
@@ -98,6 +121,7 @@ export default function VoltGrid() {
     const engine = getEngine();
     if (engine.phase === 'menu' || engine.phase === 'gameover') {
       engine.startGame();
+      setSnap(engine.getSnapshot()); // Force immediate re-render
       return;
     }
     if (engine.phase !== 'playing') return;
@@ -138,7 +162,11 @@ export default function VoltGrid() {
     e.preventDefault();
   }, [getEngine]);
 
-  const startGame = () => getEngine().startGame();
+  const startGame = useCallback(() => {
+    const engine = getEngine();
+    engine.startGame();
+    setSnap(engine.getSnapshot()); // Force immediate re-render to dismiss overlay
+  }, [getEngine]);
 
   const phaseIs = (...phases: Phase[]) => phases.includes(snap.phase);
 
