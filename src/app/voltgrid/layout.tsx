@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
 
-export default function VoltGridRouteLayout({ children }: { children: ReactNode }) {
-  return <section className="voltgrid-route-layout">{children}</section>;
+export default function VoltGridLayout({ children }: { children: ReactNode }) {
+  return <>{children}</>;
 }

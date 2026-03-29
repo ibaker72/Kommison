@@ -1,9 +1,9 @@
-import type { Metadata } from "next";
-import "./globals.css";
+import type { Metadata } from 'next';
+import './globals.css';
 
 export const metadata: Metadata = {
-  title: "Kommison",
-  description: "Game collection",
+  title: 'Kommison',
+  description: 'Arcade game collection',
 };
 
 export default function RootLayout({
@@ -12,8 +12,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="antialiased">
-      <body className="min-h-dvh">{children}</body>
+    <html lang="en">
+      <body>{children}</body>
     </html>
   );
 }

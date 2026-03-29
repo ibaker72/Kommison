@@ -1,9 +1,9 @@
 import type { Metadata, Viewport } from 'next';
-import VoltGrid from './VoltGrid';
+import VoltGrid from './VoltGridClient';
 
 export const metadata: Metadata = {
-  title: 'VoltGrid — Neon Capture Arcade',
-  description: 'Capture territory, dodge the plasma orb, and outrun spark chasers in a fullscreen neon arcade challenge.',
+  title: 'VoltGrid — Neon Territory Arcade',
+  description: 'Capture territory, trap Volt Orbs, and outrun the Shock Ball in this neon Qix reimagining.',
 };
 
 export const viewport: Viewport = {
@@ -12,14 +12,10 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: 'cover',
-  themeColor: '#050510',
+  themeColor: '#05050a',
   colorScheme: 'dark',
 };
 
 export default function VoltGridPage() {
-  return (
-    <main className="voltgrid-route">
-      <VoltGrid />
-    </main>
-  );
+  return <VoltGrid />;
 }
