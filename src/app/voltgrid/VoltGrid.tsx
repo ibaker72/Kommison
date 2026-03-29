@@ -1,12 +1,13 @@
 'use client';
 
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Vec2 = { x: number; y: number };
 type Rect = { x: number; y: number; w: number; h: number };
 type Direction = 'up' | 'down' | 'left' | 'right' | null;
+type GamePhase = 'start' | 'playing' | 'gameover';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 const COLORS = {
@@ -208,6 +209,7 @@ export default function VoltGrid() {
   const [lives, setLives] = useState(3);
   const [goal, setGoal] = useState(70);
   const [captured, setCaptured] = useState(0);
+  const [phase, setPhase] = useState<GamePhase>('start');
   const [highScore, setHighScore] = useState(() => {
     if (typeof window === 'undefined') return 0;
     const stored = Number.parseInt(window.localStorage.getItem(HIGH_SCORE_KEY) ?? '0', 10);
@@ -242,6 +244,32 @@ export default function VoltGrid() {
 
   // Fixed alias — all internal game logic continues to reference `res.w` / `res.h` unchanged.
   const res = RES;
+
+  const initSimulation = useCallback(() => {
+    const s = stateRef.current;
+    s.ghost = { x: GRID, y: GRID };
+    s.ghostTrail = [];
+    s.orb = { x: res.w * 0.5, y: res.h * 0.6 };
+    s.spark = { x: res.w * 0.75, y: res.h * 0.35 };
+    s.orbVel = { x: ORB_SPEED, y: ORB_SPEED };
+    s.sparkVel = { x: -SPARK_SPEED, y: SPARK_SPEED };
+    s.direction = 'right';
+    s.trail = [];
+    s.captureRects = [];
+    s.floatTexts = [];
+    s.shockEndsAt = 0;
+    s.slowMoUntil = 0;
+    s.slowMoScale = 1;
+    s.lastMs = performance.now();
+  }, [res.h, res.w]);
+
+  const resetRun = useCallback(() => {
+    initSimulation();
+    setScore(0);
+    setLives(3);
+    setGoal(70);
+    setCaptured(0);
+  }, [initSimulation]);
 
   // ── Ghost movement + capture ──────────────────────────────────────────────
   function updateGhost(dt: number, now: number, width: number, height: number) {
@@ -337,7 +365,17 @@ export default function VoltGrid() {
   }
 
   function loseLife(now: number) {
-    setLives((old) => Math.max(0, old - 1));
+    setLives((old) => {
+      const next = Math.max(0, old - 1);
+      if (next === 0) {
+        const s = stateRef.current;
+        soundRef.current.stopBuzz();
+        s.direction = null;
+        s.trail = [];
+        setPhase('gameover');
+      }
+      return next;
+    });
     void Haptics.impact({ style: ImpactStyle.Heavy });
     cameraRef.current.trigger(now, 22, 500);
     const snd = soundRef.current;
@@ -561,49 +599,44 @@ export default function VoltGrid() {
     buffer.width  = res.w;
     buffer.height = res.h;
 
+    initSimulation();
     const s = stateRef.current;
-    s.ghost     = { x: GRID, y: GRID };
-    s.ghostTrail = [];
-    s.orb       = { x: res.w * 0.5,  y: res.h * 0.6 };
-    s.spark     = { x: res.w * 0.75, y: res.h * 0.35 };
-    s.orbVel    = { x: ORB_SPEED, y: ORB_SPEED };
-    s.sparkVel  = { x: -SPARK_SPEED, y: SPARK_SPEED };
-    s.trail     = [];
-    s.captureRects = [];
-    s.floatTexts   = [];
-    s.lastMs    = performance.now();
 
     let raf = 0;
     const loop = (now: number) => {
       const dtMs = clamp(now - s.lastMs, 0, 34);
       s.lastMs = now;
-      const dt = dtMs / 1000;
-      const scaledDt = dt * s.slowMoScale;
-      if (now > s.slowMoUntil) s.slowMoScale = 1;
+      if (phase === 'playing') {
+        const dt = dtMs / 1000;
+        const scaledDt = dt * s.slowMoScale;
+        if (now > s.slowMoUntil) s.slowMoScale = 1;
 
-      // Advance float-text TTLs
-      for (const ft of s.floatTexts) ft.ttl -= dtMs;
+        // Advance float-text TTLs
+        for (const ft of s.floatTexts) ft.ttl -= dtMs;
 
-      updateGhost(scaledDt, now, res.w, res.h);
-      updateOrb(scaledDt, res.w, res.h);
-      updateSpark(scaledDt, res.w, res.h);
-      handleCollisions(now);
+        updateGhost(scaledDt, now, res.w, res.h);
+        updateOrb(scaledDt, res.w, res.h);
+        updateSpark(scaledDt, res.w, res.h);
+        handleCollisions(now);
+      }
       renderFrame(now, canvas, buffer);
 
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [initSimulation, phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Pointer handlers ───────────────────────────────────────────────────────
   const onPointerDown: React.PointerEventHandler<HTMLDivElement> = (e) => {
     soundRef.current.resume();
+    if (phase !== 'playing') setPhase('playing');
     const arena = arenaRef.current;
     if (!arena) return;
+    arena.setPointerCapture(e.pointerId);
     const { left, top } = arena.getBoundingClientRect();
-    const relX = e.clientX - left;
-    const relY = e.clientY - top;
+    const relX = clamp(e.clientX - left, 0, arena.clientWidth);
+    const relY = clamp(e.clientY - top, 0, arena.clientHeight);
     const s = stateRef.current;
     s.joystickTouchId = e.pointerId;
     s.joystickBase = { x: relX, y: relY };
@@ -615,9 +648,11 @@ export default function VoltGrid() {
     const s = stateRef.current;
     if (s.joystickTouchId !== e.pointerId || !s.joystickBase) return;
     const arena = arenaRef.current;
-    const { left, top } = arena?.getBoundingClientRect() ?? { left: 0, top: 0 };
-    const dx = e.clientX - (left + s.joystickBase.x);
-    const dy = e.clientY - (top + s.joystickBase.y);
+    const rect = arena?.getBoundingClientRect();
+    const relX = clamp(e.clientX - (rect?.left ?? 0), 0, arena?.clientWidth ?? res.w);
+    const relY = clamp(e.clientY - (rect?.top ?? 0), 0, arena?.clientHeight ?? res.h);
+    const dx = relX - s.joystickBase.x;
+    const dy = relY - s.joystickBase.y;
     const dir = resolveCardinal(dx, dy);
     if (dir) s.direction = dir;
     const mag = Math.min(46, vec2Length({ x: dx, y: dy }));
@@ -629,131 +664,129 @@ export default function VoltGrid() {
   const onPointerEnd: React.PointerEventHandler<HTMLDivElement> = (e) => {
     const s = stateRef.current;
     if (s.joystickTouchId !== e.pointerId) return;
+    arenaRef.current?.releasePointerCapture(e.pointerId);
     s.joystickTouchId = -1; s.joystickBase = null; s.joystickKnob = null;
     setJoystickUi(null);
   };
 
   // ── JSX ───────────────────────────────────────────────────────────────────
+  const level = Math.floor((goal - 70) / 10) + 1;
+
   return (
     <div className="vg-page">
+      <div className="vg-shell">
+        <header className="vg-hud">
+          <span className="vg-stat"><span className="vg-lbl">Score</span><span className="vg-val">{score.toLocaleString()}</span></span>
+          <span className="vg-stat"><span className="vg-lbl">High Score</span><span className="vg-val">{highScore.toLocaleString()}</span></span>
+          <span className="vg-stat"><span className="vg-lbl">Level</span><span className="vg-val">{level}</span></span>
+          <span className="vg-stat"><span className="vg-lbl">Lives</span><span className="vg-val">{lives}</span></span>
+          <span className="vg-stat"><span className="vg-lbl">Fill</span><span className="vg-val">{captured.toFixed(1)}%</span></span>
+        </header>
 
-      {/* ── HUD: always sits above the square arena in normal flow ── */}
-      <header className="vg-hud">
-        <span className="vg-stat">
-          <span className="vg-lbl">Score</span>
-          <span className="vg-val">{score.toLocaleString()}</span>
-        </span>
-        <span className="vg-stat">
-          <span className="vg-lbl">Best</span>
-          <span className="vg-val">{highScore.toLocaleString()}</span>
-        </span>
-        <span className="vg-stat">
-          <span className="vg-lbl">Lives</span>
-          <span className="vg-val">{lives}</span>
-        </span>
-        <span className="vg-stat">
-          <span className="vg-lbl">Goal</span>
-          <span className="vg-val">{goal}%</span>
-        </span>
-        <span className="vg-stat">
-          <span className="vg-lbl">Fill</span>
-          <span className="vg-val">{captured.toFixed(1)}%</span>
-        </span>
-      </header>
+        <div
+          ref={arenaRef}
+          className="vg-arena"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerEnd}
+          onPointerCancel={onPointerEnd}
+        >
+          <canvas ref={canvasRef} className="vg-canvas" />
 
-      {/* ── Arena: centered square; canvas + joystick overlay inside ── */}
-      <div
-        ref={arenaRef}
-        className="vg-arena"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerEnd}
-        onPointerCancel={onPointerEnd}
-      >
-        <canvas ref={canvasRef} className="vg-canvas" />
+          {joystickUi && (
+            <div className="vg-joystick-root">
+              <div className="vg-joystick-base" style={{ left: joystickUi.base.x, top: joystickUi.base.y }} />
+              <div className="vg-joystick-knob" style={{ left: joystickUi.knob.x, top: joystickUi.knob.y }} />
+            </div>
+          )}
 
-        {joystickUi && (
-          <div className="vg-joystick-root">
-            <div
-              className="vg-joystick-base"
-              style={{ left: joystickUi.base.x, top: joystickUi.base.y }}
-            />
-            <div
-              className="vg-joystick-knob"
-              style={{ left: joystickUi.knob.x, top: joystickUi.knob.y }}
-            />
-          </div>
-        )}
+          {phase !== 'playing' && (
+            <div className="vg-overlay">
+              {phase === 'start' ? (
+                <>
+                  <h2>VoltGrid</h2>
+                  <p>Drag anywhere inside the cabinet to move 👻 and trap the orb.</p>
+                  <p className="vg-overlay-hint">Tap the arena to begin.</p>
+                </>
+              ) : (
+                <>
+                  <h2>Game Over</h2>
+                  <p>Final Score: {score.toLocaleString()}</p>
+                  <button
+                    type="button"
+                    className="vg-btn"
+                    onClick={() => {
+                      resetRun();
+                      setPhase('start');
+                    }}
+                  >
+                    Play Again
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <style jsx>{`
-        /* ── Page shell: dark void, vertical flex, everything centered ── */
         .vg-page {
-          position: fixed;
-          inset: 0;
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 10px;
+          background: ${COLORS.deepSpace};
+          user-select: none;
+        }
+        .vg-shell {
+          width: min(calc(100vw - 20px), calc(100dvh - 112px), 800px);
           display: flex;
           flex-direction: column;
           align-items: center;
-          justify-content: center;
-          gap: 8px;
-          padding: env(safe-area-inset-top, 8px)
-                   env(safe-area-inset-right, 8px)
-                   env(safe-area-inset-bottom, 8px)
-                   env(safe-area-inset-left, 8px);
-          background: ${COLORS.deepSpace};
-          user-select: none;
-          overflow: hidden;
-          box-sizing: border-box;
+          gap: 10px;
         }
-
-        /* ── HUD bar above the arena ── */
         .vg-hud {
           display: flex;
           align-items: center;
           justify-content: center;
           flex-wrap: wrap;
-          gap: 4px 16px;
-          padding: 7px 16px;
-          width: min(100%, 800px);
+          gap: 6px 18px;
+          padding: 10px 14px;
+          width: 100%;
           box-sizing: border-box;
-          border: 1px solid rgba(0,255,255,0.35);
-          border-radius: 12px;
+          border: 1px solid rgba(0,255,255,0.45);
+          border-radius: 14px;
           background: ${COLORS.hudBg};
-          backdrop-filter: blur(6px);
+          backdrop-filter: blur(10px);
           font: 600 11px/1.4 system-ui;
           color: ${COLORS.white};
-          flex-shrink: 0;
-          z-index: 10;
         }
         .vg-stat { display: flex; align-items: center; gap: 4px; }
         .vg-lbl  { opacity: 0.5; text-transform: uppercase; letter-spacing: 0.07em; font-size: 9px; }
         .vg-val  { color: ${COLORS.cyan}; font-size: 12px; }
-
-        /* ── Square play arena: never wider than 800 px, never taller than
-              remaining viewport after the HUD (~72 px) ── */
         .vg-arena {
           position: relative;
-          width: min(calc(100vw - 16px), calc(100vh - 80px), 800px);
+          width: 100%;
+          max-width: 800px;
           aspect-ratio: 1 / 1;
-          flex-shrink: 0;
           border: 1px solid rgba(0,255,255,0.2);
           border-radius: 4px;
           overflow: hidden;
           touch-action: none;
         }
-
-        /* ── Canvas fills the arena box absolutely ── */
         .vg-canvas {
           position: absolute;
           inset: 0;
           width: 100%;
+          max-width: 800px;
           height: 100%;
+          aspect-ratio: 1 / 1;
+          object-fit: contain;
           display: block;
           image-rendering: pixelated;
           image-rendering: crisp-edges;
         }
-
-        /* ── Joystick overlay: sits over the canvas, same bounding box ── */
         .vg-joystick-root {
           position: absolute;
           inset: 0;
@@ -777,6 +810,40 @@ export default function VoltGrid() {
           height: 42px;
           background: rgba(255,0,255,0.65);
           border: 2px solid rgba(255,255,255,0.7);
+        }
+        .vg-overlay {
+          position: absolute;
+          inset: 0;
+          z-index: 6;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 10px;
+          text-align: center;
+          color: ${COLORS.white};
+          background: rgba(5, 5, 16, 0.72);
+          border: 1px solid rgba(0,255,255,0.42);
+          backdrop-filter: blur(10px);
+          padding: 24px;
+        }
+        .vg-overlay h2 {
+          margin: 0;
+          font-size: 32px;
+          letter-spacing: 0.06em;
+          color: ${COLORS.cyan};
+          text-shadow: 0 0 14px rgba(0,255,255,0.45);
+        }
+        .vg-overlay p { margin: 0; max-width: 32ch; opacity: 0.95; }
+        .vg-overlay-hint { color: ${COLORS.magenta}; }
+        .vg-btn {
+          border: 1px solid rgba(255,0,255,0.65);
+          background: rgba(255,0,255,0.15);
+          color: ${COLORS.white};
+          padding: 8px 14px;
+          border-radius: 10px;
+          font-weight: 700;
+          cursor: pointer;
         }
       `}</style>
     </div>
