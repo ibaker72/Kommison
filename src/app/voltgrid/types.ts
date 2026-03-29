@@ -25,6 +25,14 @@ export interface Fuse {
   moveAccum: number;
 }
 
+export interface Spark {
+  /** Index along the border perimeter path */
+  pathIndex: number;
+  /** +1 or -1 patrol direction */
+  dir: number;
+  moveAccum: number;
+}
+
 export interface Particle {
   x: number;
   y: number;
@@ -41,6 +49,7 @@ export interface GameSnapshot {
   highScore: number;
   lives: number;
   level: number;
+  targetPct: number;
   capturedPct: number;
   phase: Phase;
   fuseActive: boolean;
