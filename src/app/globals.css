@@ -54,35 +54,21 @@ body.voltgrid-body-lock {
 
 .voltgrid-route-layout,
 .voltgrid-route {
-  position: fixed;
-  inset: 0;
-  inline-size: 100vw;
-  block-size: 100dvh;
+  position: relative;
+  inline-size: 100%;
+  block-size: 100%;
   overflow: hidden;
-  background: #050510;
+  background: radial-gradient(circle at 20% 0%, #111c49 0%, #040716 45%, #02040d 100%);
 }
 
 .voltgrid-shell {
-  position: absolute;
+  position: fixed;
   inset: 0;
-  display: flex;
-  flex-direction: column;
   inline-size: 100%;
-  block-size: 100%;
-  background: #050510;
-}
-
-.voltgrid-playfield-shell {
-  position: relative;
-  flex: 1;
-  min-block-size: 0;
-  overflow: hidden;
-}
-
-.voltgrid-board-surface {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
+  block-size: 100dvh;
+  overflow: clip;
+  touch-action: none;
+  user-select: none;
 }
 
 .voltgrid-board-canvas {
@@ -94,52 +80,149 @@ body.voltgrid-body-lock {
 }
 
 .voltgrid-hud {
-  block-size: calc(2.25rem + var(--voltgrid-safe-top));
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  block-size: calc(3rem + var(--voltgrid-safe-top));
   padding-top: var(--voltgrid-safe-top);
-  padding-inline: 0.55rem;
+  padding-inline: max(0.8rem, env(safe-area-inset-left)) max(0.8rem, env(safe-area-inset-right));
   display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid rgba(68, 223, 255, 0.28);
-  background: linear-gradient(180deg, rgba(3, 8, 21, 0.96), rgba(3, 8, 21, 0.8));
-  backdrop-filter: blur(8px);
+  justify-content: flex-start;
   z-index: 10;
 }
 
-.voltgrid-btn {
-  padding: 0.18rem 0.42rem;
-  font-size: 10px;
-  border-radius: 0.4rem;
-  border: 1px solid rgba(120, 236, 255, 0.4);
-  background: rgba(5, 19, 42, 0.55);
+.premium-panel {
+  background: linear-gradient(145deg, rgba(10, 22, 58, 0.72), rgba(7, 16, 38, 0.58));
+  border: 1px solid rgba(124, 231, 255, 0.22);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 0 0 1px rgba(115, 197, 255, 0.1) inset, 0 18px 34px rgba(3, 9, 24, 0.45);
 }
 
-.voltgrid-btn:hover {
-  background: rgba(50, 176, 220, 0.25);
+.hud-block {
+  min-width: 3.6rem;
+  padding: 0.32rem 0.45rem;
+  border-radius: 0.55rem;
+  border: 1px solid rgba(101, 219, 253, 0.24);
+  background: rgba(2, 13, 29, 0.55);
+  line-height: 1.15;
+}
+
+.hud-block span {
+  display: block;
+  font-size: 0.58rem;
+  color: rgba(184, 235, 255, 0.74);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.hud-block strong {
+  font-size: 0.82rem;
+  color: #d6f8ff;
+}
+
+.voltgrid-action {
+  margin-left: auto;
+  border: 1px solid rgba(119, 231, 255, 0.5);
+  background: linear-gradient(180deg, rgba(14, 85, 122, 0.7), rgba(8, 29, 63, 0.88));
+  color: #ebffff;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  padding: 0.5rem 0.95rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .voltgrid-status {
-  pointer-events: none;
   position: absolute;
   left: 0;
   right: 0;
   bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.5rem max(0.8rem, env(safe-area-inset-right)) calc(var(--voltgrid-safe-bottom) + 0.55rem) max(0.8rem, env(safe-area-inset-left));
+  font-size: 0.72rem;
+  color: rgba(207, 244, 255, 0.85);
   z-index: 20;
-  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.74));
-  padding: 0.28rem 0.55rem calc(var(--voltgrid-safe-bottom) + 0.3rem);
-  font-size: 10px;
-  line-height: 1.2;
-  color: rgba(213, 248, 255, 0.82);
+}
+
+.voltgrid-touch-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+}
+
+.touch-orb {
+  position: absolute;
+  width: 5rem;
+  height: 5rem;
+  margin-left: -2.5rem;
+  margin-top: -2.5rem;
+  border-radius: 999px;
+  border: 1px solid rgba(133, 244, 255, 0.45);
+  background: radial-gradient(circle, rgba(81, 226, 253, 0.25), rgba(81, 226, 253, 0));
+}
+
+.voltgrid-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  z-index: 30;
+  padding: max(1.2rem, var(--voltgrid-safe-top)) 1rem max(1.2rem, var(--voltgrid-safe-bottom));
+  background: rgba(1, 3, 10, 0.58);
+}
+
+.overlay-card {
+  width: min(28rem, 92vw);
+  border-radius: 1rem;
+  padding: 1.2rem 1rem;
+  text-align: center;
+}
+
+.overlay-kicker {
+  font-size: 0.66rem;
+  margin: 0;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(171, 236, 255, 0.72);
+}
+
+.overlay-card h2 {
+  margin: 0.4rem 0;
+  font-size: clamp(1.4rem, 5vw, 2rem);
+  letter-spacing: 0.05em;
+}
+
+.overlay-card p {
+  margin: 0.3rem 0 1rem;
+  color: rgba(205, 243, 255, 0.84);
 }
 
 @media (max-width: 640px) {
   .voltgrid-hud {
-    block-size: calc(1.9rem + var(--voltgrid-safe-top));
-    padding-inline: 0.4rem;
+    block-size: calc(2.6rem + var(--voltgrid-safe-top));
+    gap: 0.28rem;
+  }
+
+  .hud-block {
+    min-width: 2.9rem;
+    padding: 0.28rem 0.33rem;
   }
 
   .voltgrid-status {
-    font-size: 9px;
-    padding-inline: 0.42rem;
+    font-size: 0.62rem;
+    gap: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+  .voltgrid-action {
+    font-size: 0.66rem;
+    padding: 0.4rem 0.72rem;
   }
 }
