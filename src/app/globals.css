@@ -34,7 +34,7 @@ body {
   min-block-size: 100dvh;
   overflow: hidden;
   overscroll-behavior: none;
-  background: #030612;
+  background: #050510;
 }
 
 body {
@@ -59,7 +59,7 @@ body.voltgrid-body-lock {
   inline-size: 100vw;
   block-size: 100dvh;
   overflow: hidden;
-  background: #030612;
+  background: #050510;
 }
 
 .voltgrid-shell {
@@ -69,7 +69,7 @@ body.voltgrid-body-lock {
   flex-direction: column;
   inline-size: 100%;
   block-size: 100%;
-  background: #030612;
+  background: #050510;
 }
 
 .voltgrid-playfield-shell {

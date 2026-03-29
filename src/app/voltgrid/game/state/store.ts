@@ -10,6 +10,7 @@ const withLevel = (base: GameState, levelIndex: number): GameState => {
     player: {
       ...base.player,
       lives: level.lives,
+      speed: level.playerSpeed,
     },
     orbs: buildOrbs(level.orbCount, level.orbSpeed),
     sparks: buildSparks(level.sparkCount, level.sparkSpeed),

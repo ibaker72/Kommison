@@ -6,18 +6,12 @@ export interface LevelDefinition {
   orbSpeed: number;
   sparkCount: number;
   sparkSpeed: number;
+  playerSpeed: number;
   lives: number;
 }
 
 const clamp = (value: number, min: number, max: number): number => Math.min(max, Math.max(min, value));
 
-/**
- * Infinite level scaler.
- *
- * - Level 1: 1 orb, 0 sparks, 75%
- * - Level 2: 2 orbs, 1 spark, 78%
- * - Level 3+: ramps orb/spark pressure and target % up to a hard cap of 90%
- */
 export const getLevelDefinition = (levelIndex: number): LevelDefinition => {
   const level = levelIndex + 1;
 
@@ -30,6 +24,7 @@ export const getLevelDefinition = (levelIndex: number): LevelDefinition => {
       orbSpeed: 190,
       sparkCount: 0,
       sparkSpeed: 230,
+      playerSpeed: 34,
       lives: 3,
     };
   }
@@ -43,6 +38,7 @@ export const getLevelDefinition = (levelIndex: number): LevelDefinition => {
       orbSpeed: 220,
       sparkCount: 1,
       sparkSpeed: 260,
+      playerSpeed: 38,
       lives: 3,
     };
   }
@@ -59,6 +55,7 @@ export const getLevelDefinition = (levelIndex: number): LevelDefinition => {
     orbSpeed: clamp(235 + step * 14, 235, 420),
     sparkCount,
     sparkSpeed: clamp(280 + step * 12, 280, 420),
+    playerSpeed: clamp(42 + step * 2.5, 42, 72),
     lives: 3,
   };
 };

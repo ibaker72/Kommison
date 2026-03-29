@@ -5,20 +5,24 @@ export interface Vec2 {
   y: number;
 }
 
-export type ArenaEdge = 'top' | 'right' | 'bottom' | 'left';
-export type PlayerMotionState = 'border-attached' | 'trail-active' | 'respawning' | 'capture-resolve';
+export const CELL_EMPTY = 0;
+export const CELL_CLAIMED = 1;
+export const CELL_DRAWING = 2;
+export type CellState = typeof CELL_EMPTY | typeof CELL_CLAIMED | typeof CELL_DRAWING;
 
 export interface Player {
   pos: Vec2;
   vel: Vec2;
   onBorder: boolean;
-  attachedEdge: ArenaEdge;
-  motionState: PlayerMotionState;
+  attachedEdge: 'top' | 'right' | 'bottom' | 'left';
+  motionState: 'border-attached' | 'trail-active' | 'respawning' | 'capture-resolve';
   trail: Vec2[];
   trailHeading: Vec2;
   lives: number;
   invulnMs: number;
   heading: number;
+  moveBuffer: number;
+  speed: number;
 }
 
 export interface Orb {
@@ -26,6 +30,7 @@ export interface Orb {
   vel: Vec2;
   radius: number;
   trail: Vec2[];
+  speed: number;
 }
 
 export interface Spark {
@@ -44,6 +49,15 @@ export interface Particle {
   color: string;
 }
 
+export interface Shockwave {
+  active: boolean;
+  path: Vec2[];
+  segmentIndex: number;
+  progress: number;
+  speed: number;
+  pos: Vec2;
+}
+
 export interface GameState {
   phase: GamePhase;
   player: Player;
@@ -56,6 +70,9 @@ export interface GameState {
   shakeMs: number;
   particles: Particle[];
   statusText: string;
+  perimeter: number[];
+  shockwave: Shockwave | null;
+  cutClaimedCells: number;
 }
 
 export interface InputState {
@@ -66,12 +83,7 @@ export interface InputState {
   pointerActive: boolean;
 }
 
-export type GameEvent =
-  | 'death-hit'
-  | 'trail-zapped'
-  | 'capture'
-  | 'win'
-  | 'game-over';
+export type GameEvent = 'death-hit' | 'trail-zapped' | 'capture' | 'win' | 'game-over';
 
 export interface StepResult {
   state: GameState;
@@ -84,3 +96,5 @@ export interface TrailCollision {
   point: Vec2;
   normal: Vec2;
 }
+
+export type ArenaEdge = 'top' | 'right' | 'bottom' | 'left';
