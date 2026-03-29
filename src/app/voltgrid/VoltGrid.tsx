@@ -3,22 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { VoltGridEngine } from './core/engine';
 import { renderVoltGrid } from './core/renderer';
+import { createInitialUiState } from './core/state';
 import type { GameSnapshot, Vec2 } from './core/types';
-
-const EMPTY_SNAPSHOT: GameSnapshot = {
-  score: 0,
-  highScore: 0,
-  lives: 3,
-  stage: 1,
-  capturedPct: 0,
-  targetPct: 70,
-  combo: 0,
-  phase: 'ready',
-  pulse: 0,
-  shake: 0,
-  floatTexts: [],
-  touchVector: null,
-};
 
 async function vibrate(style: 'light' | 'medium' | 'heavy'): Promise<void> {
   try {
@@ -39,7 +25,7 @@ async function vibrate(style: 'light' | 'medium' | 'heavy'): Promise<void> {
 export default function VoltGrid() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const engineRef = useRef<VoltGridEngine | null>(null);
-  const [snapshot, setSnapshot] = useState<GameSnapshot>(EMPTY_SNAPSHOT);
+  const [snapshot, setSnapshot] = useState<GameSnapshot>(() => createInitialUiState());
   const [touchOrigin, setTouchOrigin] = useState<Vec2 | null>(null);
 
   useEffect(() => {

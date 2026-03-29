@@ -1,6 +1,7 @@
 import type { StageConfig } from './types';
 
 export const HIGH_SCORE_KEY = 'voltgrid:high-score-v2';
+export const RUN_SNAPSHOT_KEY = 'voltgrid:run-snapshot-v1';
 
 export function getStageConfig(stageIndex: number): StageConfig {
   const stage = stageIndex + 1;

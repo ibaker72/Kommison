@@ -1,8 +1,7 @@
 import { getStageConfig, HIGH_SCORE_KEY } from './levels';
+import { createInitialRunState, inspectAndSanitizePersistence } from './state';
 import type { Direction, EngineCallbacks, EngineState, GameSnapshot, Vec2 } from './types';
 
-const BASE_COLS = 84;
-const BASE_ROWS = 132;
 const STEP = 1 / 60;
 
 function key(x: number, y: number, cols: number): number {
@@ -39,10 +38,21 @@ export class VoltGridEngine {
   private lastTime = 0;
   private state: EngineState;
   private touchVector: Vec2 | null = null;
+  private bootMeta: { source: 'fresh' | 'restored'; validation: string } = {
+    source: 'fresh',
+    validation: 'uninitialized',
+  };
+  private phaseLogRef: string | null = null;
+  private livesLogRef: number | null = null;
+  private collisionsLogRef: boolean | null = null;
 
   constructor(callbacks: EngineCallbacks) {
     this.callbacks = callbacks;
-    this.state = this.buildInitialState();
+    const persistence = inspectAndSanitizePersistence();
+    this.bootMeta = { source: persistence.source, validation: persistence.validation };
+    this.state = this.buildInitialState(0, 0, persistence.highScore, 3);
+    this.logDebug('boot', this.bootMeta);
+    this.enforceStartupGuards('constructor');
   }
 
   start(): void {
@@ -93,6 +103,8 @@ export class VoltGridEngine {
     if (this.state.phase === 'ready' || this.state.phase === 'gameOver') {
       this.state = this.buildInitialState();
       this.state.phase = 'playing';
+      this.armRound('start-run');
+      this.enforceStartupGuards('start-run');
       this.emitSnapshot();
     }
   }
@@ -102,12 +114,16 @@ export class VoltGridEngine {
     const current = this.state;
     this.state = this.buildInitialState(current.stageIndex + 1, current.score, current.highScore, current.lives);
     this.state.phase = 'playing';
+    this.armRound('advance-stage');
+    this.enforceStartupGuards('advance-stage');
     this.emitSnapshot();
   }
 
   restart(): void {
     this.state = this.buildInitialState();
     this.state.phase = 'playing';
+    this.armRound('restart');
+    this.enforceStartupGuards('restart');
     this.emitSnapshot();
   }
 
@@ -126,6 +142,7 @@ export class VoltGridEngine {
 
   private update(dt: number): void {
     const s = this.state;
+    this.enforceStartupGuards('update');
 
     if (s.phase === 'paused' || s.phase === 'ready' || s.phase === 'gameOver') {
       this.updateFx(dt);
@@ -153,7 +170,7 @@ export class VoltGridEngine {
     this.stepQix(dt, stage.qixSpeed, stage.qixTurnRate);
     this.stepHunters(dt, stage.hunterSpeed);
 
-    if (this.hitByQixTrail() || this.hitByHunter()) {
+    if (s.collisionsEnabled && (this.hitByQixTrail() || this.hitByHunter())) {
       this.loseLife();
       this.emitSnapshot();
       return;
@@ -177,53 +194,7 @@ export class VoltGridEngine {
   }
 
   private buildInitialState(stageIndex = 0, score = 0, highScore = 0, lives = 3): EngineState {
-    const cols = BASE_COLS;
-    const rows = BASE_ROWS;
-    const safe = new Uint8Array(cols * rows);
-    const trail = new Uint8Array(cols * rows);
-
-    for (let y = 0; y < rows; y += 1) {
-      for (let x = 0; x < cols; x += 1) {
-        if (x <= 1 || y <= 1 || x >= cols - 2 || y >= rows - 2) {
-          safe[key(x, y, cols)] = 1;
-        }
-      }
-    }
-
-    const qx = cols * 0.5;
-    const qy = rows * 0.5;
-    const storedHigh = highScore || (typeof window !== 'undefined' ? Number(window.localStorage.getItem(HIGH_SCORE_KEY) ?? '0') || 0 : 0);
-
-    const state: EngineState = {
-      cols,
-      rows,
-      cellSize: 1,
-      safe,
-      trail,
-      playerCell: { x: 2, y: Math.floor(rows / 2) },
-      moveDir: 'up',
-      queuedDir: 'up',
-      drawing: false,
-      qixPos: { x: qx, y: qy },
-      qixVel: { x: 13, y: 11 },
-      qixRibbon: [],
-      hunters: [],
-      boundary: [],
-      particles: [],
-      score,
-      highScore: storedHigh,
-      lives,
-      stageIndex,
-      combo: 0,
-      comboTimer: 0,
-      capturedPct: 0,
-      phase: 'ready',
-      pulse: 0,
-      shake: 0,
-      floatTexts: [],
-      stageTimer: 0,
-    };
-
+    const state = createInitialRunState({ stageIndex, score, highScore, lives });
     this.rebuildBoundary(state);
     this.spawnHunters(state);
     this.recomputeCaptured(state);
@@ -422,6 +393,8 @@ export class VoltGridEngine {
 
   private loseLife(): void {
     const s = this.state;
+    if (!s.collisionsEnabled || !s.isRoundActive || !s.isRunInitialized) return;
+
     s.trail.fill(0);
     s.drawing = false;
     s.combo = 0;
@@ -436,6 +409,9 @@ export class VoltGridEngine {
     this.callbacks.onDeath();
     if (s.lives <= 0) {
       s.phase = 'gameOver';
+      s.gameOverReason = 'lives-depleted';
+      s.isRoundActive = false;
+      s.collisionsEnabled = false;
     }
   }
 
@@ -494,7 +470,9 @@ export class VoltGridEngine {
     for (let i = 0; i < total; i += 1) {
       safeCount += state.safe[i];
     }
-    state.capturedPct = Math.round((safeCount / total) * 1000) / 10;
+    const playableArea = Math.max(1, total - state.baselineSafeCells);
+    const claimedPlayable = Math.max(0, safeCount - state.baselineSafeCells);
+    state.capturedPct = Math.round((claimedPlayable / playableArea) * 1000) / 10;
   }
 
   private isBlocked(x: number, y: number): boolean {
@@ -505,6 +483,7 @@ export class VoltGridEngine {
 
   private emitSnapshot(): void {
     const s = this.state;
+    this.logRuntimeTransitions();
     const stage = getStageConfig(s.stageIndex);
     const snapshot: GameSnapshot = {
       score: s.score,
@@ -521,5 +500,62 @@ export class VoltGridEngine {
       touchVector: this.touchVector,
     };
     this.callbacks.onSnapshot(snapshot);
+  }
+
+  private armRound(source: string): void {
+    const s = this.state;
+    s.isRunInitialized = true;
+    s.isRoundActive = true;
+    s.collisionsEnabled = true;
+    s.gameOverReason = null;
+    this.logDebug('round-armed', { source, collisionsEnabled: s.collisionsEnabled });
+  }
+
+  private enforceStartupGuards(source: string): void {
+    const s = this.state;
+    const mustReset =
+      !Number.isFinite(s.lives) ||
+      s.lives <= 0 ||
+      !Number.isFinite(s.capturedPct) ||
+      s.capturedPct < 0 ||
+      s.capturedPct > 100 ||
+      (s.phase === 'gameOver' && !s.isRunInitialized) ||
+      (s.phase === 'ready' && s.capturedPct > 0);
+
+    if (mustReset) {
+      const resetHighScore = Math.max(0, s.highScore);
+      this.state = this.buildInitialState(0, 0, resetHighScore, 3);
+      this.logDebug('startup-guard-reset', { source, reason: 'invalid startup state' });
+    }
+  }
+
+  private logRuntimeTransitions(): void {
+    if (process.env.NODE_ENV === 'production') return;
+    const { phase, lives, collisionsEnabled, gameOverReason } = this.state;
+
+    if (this.phaseLogRef !== phase) {
+      this.phaseLogRef = phase;
+      this.logDebug('phase-change', { phase });
+    }
+
+    if (this.livesLogRef !== lives) {
+      this.livesLogRef = lives;
+      this.logDebug('lives-change', { lives });
+    }
+
+    if (this.collisionsLogRef !== collisionsEnabled) {
+      this.collisionsLogRef = collisionsEnabled;
+      this.logDebug('collisions-enabled-change', {
+        collisionsEnabled,
+        isRunInitialized: this.state.isRunInitialized,
+        isRoundActive: this.state.isRoundActive,
+        gameOverReason,
+      });
+    }
+  }
+
+  private logDebug(event: string, payload: Record<string, unknown>): void {
+    if (process.env.NODE_ENV === 'production') return;
+    console.info('[VoltGrid][debug]', event, payload);
   }
 }

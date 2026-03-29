@@ -81,6 +81,11 @@ export type EngineState = {
   shake: number;
   floatTexts: FloatText[];
   stageTimer: number;
+  baselineSafeCells: number;
+  isRunInitialized: boolean;
+  isRoundActive: boolean;
+  collisionsEnabled: boolean;
+  gameOverReason: string | null;
 };
 
 export type EngineCallbacks = {
