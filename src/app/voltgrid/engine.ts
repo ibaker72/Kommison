@@ -1,13 +1,16 @@
 import {
-  type Vec2, type Phase, type Direction, type Orb, type Fuse, type Particle, type GameSnapshot,
+  type Vec2, type Phase, type Direction, type Orb, type Fuse, type Spark, type Particle, type GameSnapshot,
   VOID, BORDER, CAPTURED, TRAIL,
 } from './types';
 
 // ─── Tuning Constants ────────────────────────────────────────────
 const GRID = 80;
-const TARGET_PCT = 75;
+const BASE_TARGET_PCT = 75;
+const MAX_TARGET_PCT = 90;
+const TARGET_PCT_PER_LEVEL = 2;
 const PLAYER_SPEED = 180;    // cells/sec
 const ORB_BASE_SPEED = 100;  // cells/sec
+const SPARK_BASE_SPEED = 90; // cells/sec along border
 const FUSE_SPEED = 280;      // cells/sec along trail
 const FUSE_TIME = 2000;      // ms before fuse kills
 const INITIAL_LIVES = 3;
@@ -102,12 +105,16 @@ export class VoltGridEngine {
   drawing = false;
   trail: Vec2[] = [];
   orbs: Orb[] = [];
+  sparks: Spark[] = [];
+  /** Pre-computed border perimeter path (clockwise) for spark patrol */
+  borderPath: Vec2[] = [];
   fuse: Fuse | null = null;
   fuseTimer = 0;
   score = 0;
   highScore = 0;
   lives = INITIAL_LIVES;
   level = 1;
+  targetPct = BASE_TARGET_PCT;
   capturedPct = 0;
   phase: Phase = 'menu';
   particles: Particle[] = [];
@@ -123,6 +130,7 @@ export class VoltGridEngine {
 
   private moveAccum = 0;
   private orbAccum = 0;
+  private sparkAccum = 0;
 
   constructor() {
     this.grid = new Uint8Array(GRID * GRID);
@@ -143,6 +151,34 @@ export class VoltGridEngine {
         }
       }
     }
+    this.buildBorderPath();
+  }
+
+  /** Build a clockwise perimeter path along the inner border edge (row/col = 1 and GRID-2). */
+  private buildBorderPath(): void {
+    const path: Vec2[] = [];
+    const min = 1, max = GRID - 2;
+    // Top edge: left to right
+    for (let x = min; x <= max; x++) path.push({ x, y: min });
+    // Right edge: top+1 to bottom
+    for (let y = min + 1; y <= max; y++) path.push({ x: max, y });
+    // Bottom edge: right-1 to left
+    for (let x = max - 1; x >= min; x--) path.push({ x, y: max });
+    // Left edge: bottom-1 to top+1
+    for (let y = max - 1; y > min; y--) path.push({ x: min, y });
+    this.borderPath = path;
+  }
+
+  private spawnSparks(count: number): void {
+    const pathLen = this.borderPath.length;
+    for (let i = 0; i < count; i++) {
+      const startIdx = Math.floor(Math.random() * pathLen);
+      this.sparks.push({
+        pathIndex: startIdx,
+        dir: Math.random() < 0.5 ? 1 : -1,
+        moveAccum: 0,
+      });
+    }
   }
 
   startGame(): void {
@@ -152,40 +188,48 @@ export class VoltGridEngine {
     this.drawing = false;
     this.trail = [];
     this.orbs = [];
+    this.sparks = [];
     this.fuse = null;
     this.fuseTimer = 0;
     this.score = 0;
     this.lives = INITIAL_LIVES;
     this.level = 1;
+    this.targetPct = BASE_TARGET_PCT;
     this.capturedPct = 0;
     this.phase = 'playing';
     this.particles = [];
     this.moveAccum = 0;
     this.orbAccum = 0;
+    this.sparkAccum = 0;
     this.flashTimer = 0;
     this.captureAnimCells = [];
     this.captureAnimTimer = 0;
     this.sound.init();
     this.spawnOrbs(1);
+    this.spawnSparks(1);
   }
 
   nextLevel(): void {
     this.level++;
+    this.targetPct = Math.min(MAX_TARGET_PCT, BASE_TARGET_PCT + (this.level - 1) * TARGET_PCT_PER_LEVEL);
     this.initBorder();
     this.player = { x: 2, y: 2 };
     this.playerDir = 'none';
     this.drawing = false;
     this.trail = [];
     this.orbs = [];
+    this.sparks = [];
     this.fuse = null;
     this.fuseTimer = 0;
     this.capturedPct = 0;
     this.moveAccum = 0;
     this.orbAccum = 0;
+    this.sparkAccum = 0;
     this.particles = [];
     this.captureAnimCells = [];
     this.captureAnimTimer = 0;
     this.spawnOrbs(Math.min(this.level, 5));
+    this.spawnSparks(Math.min(1 + Math.floor(this.level / 2), 4));
     this.score += LEVEL_BONUS;
     this.phase = 'playing';
     this.sound.play('levelup');
@@ -201,6 +245,7 @@ export class VoltGridEngine {
       highScore: this.highScore,
       lives: this.lives,
       level: this.level,
+      targetPct: this.targetPct,
       capturedPct: this.capturedPct,
       phase: this.phase,
       fuseActive: this.fuse !== null,
@@ -255,6 +300,15 @@ export class VoltGridEngine {
       this.stepOrbs();
     }
 
+    // Spark movement along border
+    const sparkSpeed = SPARK_BASE_SPEED + this.level * 10;
+    this.sparkAccum += dt;
+    const sparkInterval = 1 / sparkSpeed;
+    while (this.sparkAccum >= sparkInterval) {
+      this.sparkAccum -= sparkInterval;
+      this.stepSparks();
+    }
+
     // Fuse logic
     if (this.fuse) {
       this.fuseTimer += dt * 1000;
@@ -296,6 +350,8 @@ export class VoltGridEngine {
       // Safe-to-safe
       this.player = { x: nx, y: ny };
       this.drawing = false;
+      // Check if we walked into a spark
+      if (this.checkSparkCollision()) return;
     } else if (currentSafe && !nextSafe) {
       // Enter void → start drawing
       this.drawing = true;
@@ -314,6 +370,17 @@ export class VoltGridEngine {
       this.grid[ny * GRID + nx] = TRAIL;
       this.trail.push({ x: nx, y: ny });
     }
+  }
+
+  private checkSparkCollision(): boolean {
+    for (const spark of this.sparks) {
+      const pos = this.borderPath[spark.pathIndex];
+      if (pos && pos.x === this.player.x && pos.y === this.player.y) {
+        this.killPlayer();
+        return true;
+      }
+    }
+    return false;
   }
 
   private isSafe(x: number, y: number): boolean {
@@ -377,6 +444,35 @@ export class VoltGridEngine {
         ));
       }
     }
+  }
+
+  // ─── Sparks ─────────────────────────────────────────────────
+  private stepSparks(): void {
+    const pathLen = this.borderPath.length;
+    if (pathLen === 0) return;
+
+    for (const spark of this.sparks) {
+      spark.pathIndex = ((spark.pathIndex + spark.dir) % pathLen + pathLen) % pathLen;
+      const pos = this.borderPath[spark.pathIndex];
+
+      // Check player collision
+      if (pos.x === this.player.x && pos.y === this.player.y) {
+        this.killPlayer();
+        return;
+      }
+
+      // Particle trail
+      if (Math.random() < 0.3) {
+        this.particles.push(this.makeParticle(
+          pos.x, pos.y, '#f0f',
+          (Math.random() - 0.5) * 3, (Math.random() - 0.5) * 3, 0.25
+        ));
+      }
+    }
+  }
+
+  getSparkPositions(): Vec2[] {
+    return this.sparks.map(s => this.borderPath[s.pathIndex]);
   }
 
   // ─── Fuse (Shock Ball) ─────────────────────────────────────
@@ -515,7 +611,7 @@ export class VoltGridEngine {
     this.updateCapturedPct();
 
     // Check level complete
-    if (this.capturedPct >= TARGET_PCT) {
+    if (this.capturedPct >= this.targetPct) {
       this.phase = 'levelup';
       this.levelUpTimer = 2.0;
       this.flashTimer = 0.5;
@@ -524,7 +620,7 @@ export class VoltGridEngine {
     }
 
     // Respawn orbs if all destroyed
-    if (this.orbs.length === 0 && this.capturedPct < TARGET_PCT) {
+    if (this.orbs.length === 0 && this.capturedPct < this.targetPct) {
       this.spawnOrbs(Math.min(this.level, 5));
     }
   }

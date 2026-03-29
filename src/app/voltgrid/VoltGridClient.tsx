@@ -14,8 +14,6 @@ import { VoltGridEngine } from './engine';
 import { renderVoltGrid } from './renderer';
 import type { Direction, GameSnapshot, Phase } from './types';
 
-const TARGET_PCT = 75;
-
 export default function VoltGrid() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const engineRef = useRef<VoltGridEngine | null>(null);
@@ -34,6 +32,7 @@ export default function VoltGrid() {
     highScore: 0,
     lives: 3,
     level: 1,
+    targetPct: 75,
     capturedPct: 0,
     phase: 'menu',
     fuseActive: false,
@@ -56,6 +55,7 @@ export default function VoltGrid() {
         prev.highScore === next.highScore &&
         prev.lives === next.lives &&
         prev.level === next.level &&
+        prev.targetPct === next.targetPct &&
         prev.capturedPct === next.capturedPct &&
         prev.phase === next.phase &&
         prev.fuseActive === next.fuseActive &&
@@ -279,7 +279,7 @@ export default function VoltGrid() {
         </div>
 
         <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
-          <span>{snap.capturedPct}% / {TARGET_PCT}%</span>
+          <span>{snap.capturedPct}% / {snap.targetPct}%</span>
           <span style={{ color: '#f44' }}>
             {'♥'.repeat(Math.max(0, snap.lives))}
             <span style={{ opacity: 0.2 }}>{'♥'.repeat(Math.max(0, 3 - snap.lives))}</span>
@@ -580,7 +580,7 @@ function Instructions() {
       <div>Draw lines across the void to capture territory</div>
       <div>Enclose a <span style={{ color: '#f80' }}>Volt Orb</span> for 5,000pt containment kill</div>
       <div>If an orb hits your trail, outrun the <span style={{ color: '#f80' }}>Shock Ball</span> fuse!</div>
-      <div>Claim <span style={{ color: '#0f0' }}>{TARGET_PCT}%</span> to advance</div>
+      <div>Claim <span style={{ color: '#0f0' }}>75%+</span> to advance</div>
     </div>
   );
 }

@@ -116,6 +116,44 @@ export function renderVoltGrid(canvas: HTMLCanvasElement, engine: VoltGridEngine
     ctx.shadowBlur = 0;
   }
 
+  // Sparks (border patrollers)
+  const sparkPositions = engine.getSparkPositions();
+  for (const sp of sparkPositions) {
+    const sx = sp.x * cellW + cellW / 2;
+    const sy = sp.y * cellH + cellH / 2;
+    const sparkPulse = Math.sin(t * 10 + sp.x + sp.y) * 0.3 + 0.7;
+    const sparkRadius = cellW * 0.7 * sparkPulse;
+
+    // Outer glow
+    const sparkGrd = ctx.createRadialGradient(sx, sy, 0, sx, sy, sparkRadius * 3);
+    sparkGrd.addColorStop(0, 'rgba(255,0,255,0.6)');
+    sparkGrd.addColorStop(0.5, 'rgba(255,0,255,0.2)');
+    sparkGrd.addColorStop(1, 'transparent');
+    ctx.fillStyle = sparkGrd;
+    ctx.beginPath();
+    ctx.arc(sx, sy, sparkRadius * 3, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Core diamond shape
+    ctx.fillStyle = '#f0f';
+    ctx.shadowColor = '#f0f';
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(sx, sy - sparkRadius);
+    ctx.lineTo(sx + sparkRadius * 0.6, sy);
+    ctx.lineTo(sx, sy + sparkRadius);
+    ctx.lineTo(sx - sparkRadius * 0.6, sy);
+    ctx.closePath();
+    ctx.fill();
+
+    // White center
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(sx, sy, sparkRadius * 0.25, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+
   // Fuse (Shock Ball)
   const fusePos = engine.getFusePosition();
   if (fusePos && engine.fuse) {
