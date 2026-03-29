@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from 'next';
-import VoltGrid from './VoltGridClient';
+import VoltGrid from './VoltGrid';
 
 export const metadata: Metadata = {
   title: 'VoltGrid — Neon Territory Arcade',
