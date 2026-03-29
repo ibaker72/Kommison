@@ -419,12 +419,14 @@ export default function VoltGrid() {
 
       for (const orb of g.orbs) {
         if (!orb.alive) continue;
+        const orbRadius = g.cell * 0.38;
         ctx.fillStyle = '#ff6aef';
         ctx.shadowColor = '#ff6aef';
         ctx.shadowBlur = 12;
-        ctx.beginPath();
-        ctx.arc(orb.x, orb.y, g.cell * 0.38, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = `${orbRadius * 2.15}px Arial`;
+        ctx.fillText('👾', orb.x, orb.y);
       }
       ctx.shadowBlur = 0;
 
@@ -455,19 +457,17 @@ export default function VoltGrid() {
       const px = (g.player.x + 0.5) * g.cell;
       const py = (g.player.y + 0.5) * g.cell;
       const angle = g.dir === 'up' ? -Math.PI / 2 : g.dir === 'down' ? Math.PI / 2 : g.dir === 'left' ? Math.PI : 0;
+      const playerRadius = g.cell * 0.52;
       ctx.save();
       ctx.translate(px, py);
       ctx.rotate(angle);
       ctx.fillStyle = g.drawing ? MAGENTA : CYAN;
       ctx.shadowColor = g.drawing ? MAGENTA : CYAN;
       ctx.shadowBlur = 16;
-      ctx.beginPath();
-      ctx.moveTo(g.cell * 0.52, 0);
-      ctx.lineTo(-g.cell * 0.45, -g.cell * 0.35);
-      ctx.lineTo(-g.cell * 0.12, 0);
-      ctx.lineTo(-g.cell * 0.45, g.cell * 0.35);
-      ctx.closePath();
-      ctx.fill();
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.font = `${playerRadius * 2.1}px Arial`;
+      ctx.fillText('🚀', 0, 0);
       ctx.restore();
       ctx.shadowBlur = 0;
 
