@@ -6,6 +6,7 @@ type Dir = 'up' | 'down' | 'left' | 'right' | 'none';
 
 type Orb = { x: number; y: number; vx: number; vy: number; alive: boolean };
 type Spark = { t: number; speed: number };
+type Explosion = { x: number; y: number; ttl: number };
 
 type Joystick = {
   active: boolean;
@@ -14,6 +15,12 @@ type Joystick = {
   baseY: number;
   knobX: number;
   knobY: number;
+};
+
+type SoundManager = {
+  initFromGesture: () => void;
+  playCapture: () => void;
+  playDeath: () => void;
 };
 
 type Game = {
@@ -28,6 +35,7 @@ type Game = {
   trailList: number[];
   trailOrder: Int32Array;
   player: { x: number; y: number };
+  playerTrail: Array<{ x: number; y: number }>;
   dir: Dir;
   drawing: boolean;
   moveAcc: number;
@@ -41,10 +49,13 @@ type Game = {
   levelTimer: number;
   orbs: Orb[];
   sparks: Spark[];
+  explosions: Explosion[];
   fuseActive: boolean;
   fusePos: number;
   fuseSpeed: number;
   joystick: Joystick;
+  bgCanvas: HTMLCanvasElement | OffscreenCanvas | null;
+  sound: SoundManager;
 };
 
 const SPACE = '#040716';
@@ -92,6 +103,7 @@ export default function VoltGrid() {
       trailList: [],
       trailOrder: new Int32Array(0),
       player: { x: 0, y: 0 },
+      playerTrail: [],
       dir: 'none',
       drawing: false,
       moveAcc: 0,
@@ -105,12 +117,65 @@ export default function VoltGrid() {
       levelTimer: 0,
       orbs: [],
       sparks: [],
+      explosions: [],
       fuseActive: false,
       fusePos: 0,
       fuseSpeed: 42,
       joystick: { active: false, id: null, baseX: 0, baseY: 0, knobX: 0, knobY: 0 },
+      bgCanvas: null,
+      sound: createSoundManager(),
     };
     gameRef.current = g;
+
+    const rebuildBackground = () => {
+      const bg = typeof OffscreenCanvas !== 'undefined'
+        ? new OffscreenCanvas(Math.max(1, g.w), Math.max(1, g.h))
+        : (() => {
+          const c = document.createElement('canvas');
+          c.width = Math.max(1, g.w);
+          c.height = Math.max(1, g.h);
+          return c;
+        })();
+
+      const bgCtx = bg.getContext('2d');
+      if (!bgCtx) return;
+
+      bgCtx.fillStyle = SPACE;
+      bgCtx.fillRect(0, 0, g.w, g.h);
+
+      for (let y = 0; y < g.rows; y++) {
+        for (let x = 0; x < g.cols; x++) {
+          if (!g.safe[idx(x, y, g.cols)]) continue;
+          const a = ((x + y) & 1) === 0 ? 0.16 : 0.08;
+          bgCtx.fillStyle = `rgba(26,245,255,${a})`;
+          bgCtx.fillRect(x * g.cell, y * g.cell, g.cell, g.cell);
+        }
+      }
+
+      bgCtx.strokeStyle = 'rgba(255,42,224,0.16)';
+      bgCtx.lineWidth = 1;
+      for (let x = 0; x <= g.cols; x += 3) {
+        bgCtx.beginPath();
+        bgCtx.moveTo(x * g.cell, 0);
+        bgCtx.lineTo(x * g.cell, g.rows * g.cell);
+        bgCtx.stroke();
+      }
+      for (let y = 0; y <= g.rows; y += 3) {
+        bgCtx.beginPath();
+        bgCtx.moveTo(0, y * g.cell);
+        bgCtx.lineTo(g.cols * g.cell, y * g.cell);
+        bgCtx.stroke();
+      }
+
+      bgCtx.strokeStyle = CYAN;
+      bgCtx.shadowColor = CYAN;
+      bgCtx.shadowBlur = 12;
+      bgCtx.lineWidth = 2;
+      bgCtx.strokeRect(0.5, 0.5, g.cols * g.cell - 1, g.rows * g.cell - 1);
+      bgCtx.shadowBlur = 0;
+
+      g.bgCanvas = bg;
+    };
 
     const buildLevel = (level: number) => {
       g.level = level;
@@ -124,6 +189,8 @@ export default function VoltGrid() {
       g.trail = new Uint8Array(g.cols * g.rows);
       g.trailOrder = new Int32Array(g.cols * g.rows).fill(-1);
       g.trailList = [];
+      g.playerTrail = [];
+      g.explosions = [];
 
       for (let x = 0; x < g.cols; x++) {
         g.safe[idx(x, 0, g.cols)] = 1;
@@ -169,6 +236,15 @@ export default function VoltGrid() {
         t: (i * ((g.cols - 1) * 2 + (g.rows - 1) * 2)) / Math.max(1, Math.min(3, 1 + Math.floor((level - 1) / 3))),
         speed: 0.14 + level * 0.024,
       }));
+
+      rebuildBackground();
+    };
+
+    const resetGame = () => {
+      g.level = 1;
+      g.score = 0;
+      g.lives = 3;
+      buildLevel(1);
     };
 
     const resetTrail = () => {
@@ -182,7 +258,9 @@ export default function VoltGrid() {
 
     const loseLife = () => {
       g.lives -= 1;
+      g.sound.playDeath();
       g.player = { x: 0, y: Math.floor(g.rows / 2) };
+      g.playerTrail = [];
       g.dir = 'none';
       resetTrail();
       if (g.lives <= 0) g.phase = 'gameover';
@@ -208,7 +286,6 @@ export default function VoltGrid() {
         queue[qt++] = id;
       };
 
-      // Robust void-preservation flood fill: seed from every live orb so only orb-connected void remains uncaptured.
       for (const orb of g.orbs) {
         if (!orb.alive) continue;
         const ox = clamp(Math.floor(orb.x / g.cell), 1, g.cols - 2);
@@ -246,6 +323,7 @@ export default function VoltGrid() {
         if (g.safe[id] && !visited[id]) {
           orb.alive = false;
           containedKills += 1;
+          g.explosions.push({ x: orb.x, y: orb.y, ttl: 0.28 });
         }
       }
       g.orbs = g.orbs.filter(o => o.alive);
@@ -258,6 +336,8 @@ export default function VoltGrid() {
 
       g.capturedPct = Math.floor((safeInside / Math.max(1, totalVoid)) * 100);
       g.score += filledCells * 6 + containedKills * 6000;
+      g.sound.playCapture();
+      rebuildBackground();
       resetTrail();
 
       if (g.capturedPct >= g.targetPct) {
@@ -294,6 +374,8 @@ export default function VoltGrid() {
 
       g.player.x = nx;
       g.player.y = ny;
+      g.playerTrail.push({ x: nx, y: ny });
+      if (g.playerTrail.length > 10) g.playerTrail.shift();
     };
 
     const updateOrbs = (dt: number) => {
@@ -343,6 +425,9 @@ export default function VoltGrid() {
           return;
         }
       }
+
+      for (const exp of g.explosions) exp.ttl -= dt;
+      g.explosions = g.explosions.filter(exp => exp.ttl > 0);
     };
 
     const updateSparks = (dt: number) => {
@@ -366,40 +451,12 @@ export default function VoltGrid() {
     const draw = (ctx: CanvasRenderingContext2D, ts: number) => {
       ctx.setTransform(g.dpr, 0, 0, g.dpr, 0, 0);
       ctx.clearRect(0, 0, g.w, g.h);
-      ctx.fillStyle = SPACE;
-      ctx.fillRect(0, 0, g.w, g.h);
-
-      for (let y = 0; y < g.rows; y++) {
-        for (let x = 0; x < g.cols; x++) {
-          if (!g.safe[idx(x, y, g.cols)]) continue;
-          const a = ((x + y) & 1) === 0 ? 0.16 : 0.08;
-          ctx.fillStyle = `rgba(26,245,255,${a})`;
-          ctx.fillRect(x * g.cell, y * g.cell, g.cell, g.cell);
-        }
+      if (g.bgCanvas) {
+        ctx.drawImage(g.bgCanvas as CanvasImageSource, 0, 0);
+      } else {
+        ctx.fillStyle = SPACE;
+        ctx.fillRect(0, 0, g.w, g.h);
       }
-
-      // Captured neon-grid overlay
-      ctx.strokeStyle = 'rgba(255,42,224,0.16)';
-      ctx.lineWidth = 1;
-      for (let x = 0; x <= g.cols; x += 3) {
-        ctx.beginPath();
-        ctx.moveTo(x * g.cell, 0);
-        ctx.lineTo(x * g.cell, g.rows * g.cell);
-        ctx.stroke();
-      }
-      for (let y = 0; y <= g.rows; y += 3) {
-        ctx.beginPath();
-        ctx.moveTo(0, y * g.cell);
-        ctx.lineTo(g.cols * g.cell, y * g.cell);
-        ctx.stroke();
-      }
-
-      ctx.strokeStyle = CYAN;
-      ctx.shadowColor = CYAN;
-      ctx.shadowBlur = 12;
-      ctx.lineWidth = 2;
-      ctx.strokeRect(0.5, 0.5, g.cols * g.cell - 1, g.rows * g.cell - 1);
-      ctx.shadowBlur = 0;
 
       if (g.trailList.length > 1) {
         ctx.lineWidth = Math.max(2, g.cell * 0.33);
@@ -419,13 +476,13 @@ export default function VoltGrid() {
 
       for (const orb of g.orbs) {
         if (!orb.alive) continue;
-        const orbRadius = g.cell * 0.38;
+        const emojiSize = Math.floor(g.cell * 1.5);
         ctx.fillStyle = '#ff6aef';
         ctx.shadowColor = '#ff6aef';
         ctx.shadowBlur = 12;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.font = `${orbRadius * 2.15}px Arial`;
+        ctx.font = `${emojiSize}px Arial`;
         ctx.fillText('👾', orb.x, orb.y);
       }
       ctx.shadowBlur = 0;
@@ -457,7 +514,23 @@ export default function VoltGrid() {
       const px = (g.player.x + 0.5) * g.cell;
       const py = (g.player.y + 0.5) * g.cell;
       const angle = g.dir === 'up' ? -Math.PI / 2 : g.dir === 'down' ? Math.PI / 2 : g.dir === 'left' ? Math.PI : 0;
-      const playerRadius = g.cell * 0.52;
+      const emojiSize = Math.floor(g.cell * 1.5);
+
+      for (const trailPos of g.playerTrail) {
+        ctx.save();
+        ctx.globalAlpha = 0.2;
+        ctx.translate((trailPos.x + 0.5) * g.cell, (trailPos.y + 0.5) * g.cell);
+        ctx.rotate(angle);
+        ctx.fillStyle = g.drawing ? MAGENTA : CYAN;
+        ctx.shadowColor = g.drawing ? MAGENTA : CYAN;
+        ctx.shadowBlur = 8;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = `${emojiSize}px Arial`;
+        ctx.fillText('🚀', 0, 0);
+        ctx.restore();
+      }
+
       ctx.save();
       ctx.translate(px, py);
       ctx.rotate(angle);
@@ -466,10 +539,20 @@ export default function VoltGrid() {
       ctx.shadowBlur = 16;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.font = `${playerRadius * 2.1}px Arial`;
+      ctx.font = `${emojiSize}px Arial`;
       ctx.fillText('🚀', 0, 0);
       ctx.restore();
       ctx.shadowBlur = 0;
+
+      for (const exp of g.explosions) {
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, exp.ttl / 0.28);
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = `${Math.floor(g.cell * 1.5)}px Arial`;
+        ctx.fillText('💥', exp.x, exp.y);
+        ctx.restore();
+      }
 
       if (g.joystick.active) {
         ctx.globalAlpha = 0.45;
@@ -485,7 +568,6 @@ export default function VoltGrid() {
         ctx.globalAlpha = 1;
       }
 
-      // tiny animated scanline vibe
       ctx.fillStyle = `rgba(255,255,255,${0.02 + 0.01 * Math.sin(ts * 0.004)})`;
       ctx.fillRect(0, 0, g.w, g.h);
     };
@@ -528,10 +610,7 @@ export default function VoltGrid() {
         e.preventDefault();
       }
       if ((e.key === ' ' || e.key === 'Enter') && g.phase === 'gameover') {
-        g.level = 1;
-        g.score = 0;
-        g.lives = 3;
-        buildLevel(1);
+        resetGame();
       }
     };
 
@@ -539,6 +618,35 @@ export default function VoltGrid() {
       if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'a', 'd', 'w', 's', 'A', 'D', 'W', 'S'].includes(e.key)) {
         g.dir = 'none';
       }
+    };
+
+    const onPointerDown = (e: PointerEvent) => {
+      g.sound.initFromGesture();
+      if (g.phase === 'gameover') {
+        resetGame();
+        return;
+      }
+
+      if (e.pointerType !== 'touch') return;
+      g.joystick.active = true;
+      g.joystick.id = e.pointerId;
+      g.joystick.baseX = e.clientX;
+      g.joystick.baseY = e.clientY;
+      g.joystick.knobX = e.clientX;
+      g.joystick.knobY = e.clientY;
+      updateTouchDir(e.clientX, e.clientY);
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      if (!g.joystick.active || g.joystick.id !== e.pointerId) return;
+      updateTouchDir(e.clientX, e.clientY);
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if (g.joystick.id !== e.pointerId) return;
+      g.joystick.active = false;
+      g.joystick.id = null;
+      g.dir = 'none';
     };
 
     const loop = (ts: number) => {
@@ -579,37 +687,6 @@ export default function VoltGrid() {
     window.addEventListener('resize', resize);
     window.addEventListener('keydown', onKeyDown);
     window.addEventListener('keyup', onKeyUp);
-
-    const onPointerDown = (e: PointerEvent) => {
-      if (e.pointerType !== 'touch') return;
-      g.joystick.active = true;
-      g.joystick.id = e.pointerId;
-      g.joystick.baseX = e.clientX;
-      g.joystick.baseY = e.clientY;
-      g.joystick.knobX = e.clientX;
-      g.joystick.knobY = e.clientY;
-      updateTouchDir(e.clientX, e.clientY);
-
-      if (g.phase === 'gameover') {
-        g.level = 1;
-        g.score = 0;
-        g.lives = 3;
-        buildLevel(1);
-      }
-    };
-
-    const onPointerMove = (e: PointerEvent) => {
-      if (!g.joystick.active || g.joystick.id !== e.pointerId) return;
-      updateTouchDir(e.clientX, e.clientY);
-    };
-
-    const onPointerUp = (e: PointerEvent) => {
-      if (g.joystick.id !== e.pointerId) return;
-      g.joystick.active = false;
-      g.joystick.id = null;
-      g.dir = 'none';
-    };
-
     window.addEventListener('pointerdown', onPointerDown, { passive: true });
     window.addEventListener('pointermove', onPointerMove, { passive: true });
     window.addEventListener('pointerup', onPointerUp, { passive: true });
@@ -632,7 +709,7 @@ export default function VoltGrid() {
 
   return (
     <div style={{ width: '100vw', height: '100dvh', background: SPACE, position: 'relative', overflow: 'hidden', touchAction: 'none' }}>
-      <canvas ref={canvasRef} />
+      <canvas ref={canvasRef} style={{ maxWidth: '100%', height: 'auto', width: '100%', display: 'block' }} />
 
       <div
         style={{
@@ -663,11 +740,77 @@ export default function VoltGrid() {
       {hud.phase === 'gameover' && (
         <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', background: 'rgba(2,0,8,0.55)' }}>
           <div style={{ textAlign: 'center', fontFamily: 'monospace' }}>
-            <div style={{ color: '#ff6f7f', fontSize: 34, marginBottom: 10 }}>SYSTEM SHOCK</div>
-            <div style={{ color: CYAN }}>Press Space/Enter or Tap to Reboot</div>
+            <div style={{ color: '#ff6f7f', fontSize: 34, marginBottom: 10 }}>SHOCKED OUT</div>
+            <div style={{ color: CYAN }}>Tap or Press Space to Restart</div>
           </div>
         </div>
       )}
     </div>
   );
+}
+
+function createSoundManager(): SoundManager {
+  let ctx: AudioContext | null = null;
+
+  const initFromGesture = () => {
+    if (!ctx) {
+      const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctx) return;
+      ctx = new Ctx();
+    }
+    if (ctx.state === 'suspended') void ctx.resume();
+  };
+
+  const simpleTone = (fromHz: number, toHz: number, duration: number, type: OscillatorType) => {
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(fromHz, now);
+    osc.frequency.exponentialRampToValueAtTime(Math.max(40, toHz), now + duration);
+    gain.gain.setValueAtTime(0.0001, now);
+    gain.gain.exponentialRampToValueAtTime(0.15, now + 0.015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + duration + 0.02);
+  };
+
+  const crashNoise = () => {
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    const duration = 0.35;
+    const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * duration), ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = (Math.random() * 2 - 1) * (1 - i / data.length);
+    }
+    const src = ctx.createBufferSource();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    filter.type = 'lowpass';
+    filter.frequency.setValueAtTime(160, now);
+    gain.gain.setValueAtTime(0.26, now);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+    src.buffer = buffer;
+    src.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    src.start(now);
+  };
+
+  return {
+    initFromGesture,
+    playCapture: () => {
+      if (!ctx) return;
+      simpleTone(420, 980, 0.12, 'triangle');
+    },
+    playDeath: () => {
+      if (!ctx) return;
+      crashNoise();
+      simpleTone(120, 55, 0.2, 'sawtooth');
+    },
+  };
 }
