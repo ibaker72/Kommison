@@ -1,7 +1,7 @@
 'use client';
 
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 type Vec2 = { x: number; y: number };
@@ -16,10 +16,8 @@ const COLORS = {
   white: '#dffbff',
   hudBg: 'rgba(5, 5, 16, 0.68)',
 } as const;
-const INTERNAL_RES = {
-  portrait: { w: 600, h: 900 },
-  landscape: { w: 900, h: 600 },
-} as const;
+// Fixed square internal resolution — canvas always renders at 600×600 logical pixels.
+const RES = { w: 600, h: 600 } as const;
 const GRID = 30;
 const GHOST_SPEED = 210;
 const ORB_SPEED = 165;
@@ -80,6 +78,7 @@ class SoundEngine {
   }
 
   resume() { if (this.ctx?.state === 'suspended') void this.ctx.resume(); }
+  getAudioTime() { return this.ctx?.currentTime ?? 0; }
 
   playCut(now: number) {
     const ctx = this.getCtx();
@@ -205,7 +204,6 @@ export default function VoltGrid() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const bufferRef = useRef<HTMLCanvasElement | null>(null);
 
-  const [portrait, setPortrait] = useState(true);
   const [score, setScore] = useState(0);
   const [lives, setLives] = useState(3);
   const [goal, setGoal] = useState(70);
@@ -219,6 +217,7 @@ export default function VoltGrid() {
 
   const soundRef = useRef(new SoundEngine());
   const cameraRef = useRef(new Camera());
+  const arenaRef = useRef<HTMLDivElement>(null);
 
   const stateRef = useRef({
     ghost: { x: GRID, y: GRID } as Vec2,
@@ -241,17 +240,8 @@ export default function VoltGrid() {
     lastMs: 0,
   });
 
-  const res = useMemo(
-    () => (portrait ? INTERNAL_RES.portrait : INTERNAL_RES.landscape),
-    [portrait],
-  );
-
-  useEffect(() => {
-    const handleResize = () => setPortrait(window.innerHeight > window.innerWidth);
-    handleResize();
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  // Fixed alias — all internal game logic continues to reference `res.w` / `res.h` unchanged.
+  const res = RES;
 
   // ── Ghost movement + capture ──────────────────────────────────────────────
   function updateGhost(dt: number, now: number, width: number, height: number) {
@@ -260,10 +250,7 @@ export default function VoltGrid() {
 
     // Cut sound while drawing a trail
     if (s.trail.length > 0 && s.trail.length % 4 === 1) {
-      soundRef.current.playCut(soundRef.current['getCtx']?.() ? (new AudioContext()).currentTime : 0);
-      // re-use live ctx:
-      const ctx = (soundRef.current as unknown as { ctx: AudioContext }).ctx;
-      if (ctx) soundRef.current.playCut(ctx.currentTime);
+      soundRef.current.playCut(soundRef.current.getAudioTime());
     }
 
     const velocity: Vec2 =
@@ -607,24 +594,30 @@ export default function VoltGrid() {
     };
     raf = requestAnimationFrame(loop);
     return () => cancelAnimationFrame(raf);
-  }, [res.h, res.w]);
+  }, []);
 
   // ── Pointer handlers ───────────────────────────────────────────────────────
   const onPointerDown: React.PointerEventHandler<HTMLDivElement> = (e) => {
     soundRef.current.resume();
-    if (e.clientX > window.innerWidth * 0.6) return;
+    const arena = arenaRef.current;
+    if (!arena) return;
+    const { left, top } = arena.getBoundingClientRect();
+    const relX = e.clientX - left;
+    const relY = e.clientY - top;
     const s = stateRef.current;
     s.joystickTouchId = e.pointerId;
-    s.joystickBase = { x: e.clientX, y: e.clientY };
-    s.joystickKnob = { x: e.clientX, y: e.clientY };
-    setJoystickUi({ base: { x: e.clientX, y: e.clientY }, knob: { x: e.clientX, y: e.clientY } });
+    s.joystickBase = { x: relX, y: relY };
+    s.joystickKnob = { x: relX, y: relY };
+    setJoystickUi({ base: { x: relX, y: relY }, knob: { x: relX, y: relY } });
   };
 
   const onPointerMove: React.PointerEventHandler<HTMLDivElement> = (e) => {
     const s = stateRef.current;
     if (s.joystickTouchId !== e.pointerId || !s.joystickBase) return;
-    const dx = e.clientX - s.joystickBase.x;
-    const dy = e.clientY - s.joystickBase.y;
+    const arena = arenaRef.current;
+    const { left, top } = arena?.getBoundingClientRect() ?? { left: 0, top: 0 };
+    const dx = e.clientX - (left + s.joystickBase.x);
+    const dy = e.clientY - (top + s.joystickBase.y);
     const dir = resolveCardinal(dx, dy);
     if (dir) s.direction = dir;
     const mag = Math.min(46, vec2Length({ x: dx, y: dy }));
@@ -642,41 +635,150 @@ export default function VoltGrid() {
 
   // ── JSX ───────────────────────────────────────────────────────────────────
   return (
-    <section
-      className="voltgrid-shell"
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={onPointerEnd}
-      onPointerCancel={onPointerEnd}
-    >
-      <canvas ref={canvasRef} className="voltgrid-canvas" />
+    <div className="vg-page">
 
-      <div className={portrait ? 'hud hud-bottom' : 'hud hud-top'}>
-        <span>Score: {score}</span>
-        <span>Lives: {lives}</span>
-        <span>Goal: {goal}%</span>
-        <span>Captured: {captured.toFixed(1)}%</span>
-        <span>High: {highScore}</span>
+      {/* ── HUD: always sits above the square arena in normal flow ── */}
+      <header className="vg-hud">
+        <span className="vg-stat">
+          <span className="vg-lbl">Score</span>
+          <span className="vg-val">{score.toLocaleString()}</span>
+        </span>
+        <span className="vg-stat">
+          <span className="vg-lbl">Best</span>
+          <span className="vg-val">{highScore.toLocaleString()}</span>
+        </span>
+        <span className="vg-stat">
+          <span className="vg-lbl">Lives</span>
+          <span className="vg-val">{lives}</span>
+        </span>
+        <span className="vg-stat">
+          <span className="vg-lbl">Goal</span>
+          <span className="vg-val">{goal}%</span>
+        </span>
+        <span className="vg-stat">
+          <span className="vg-lbl">Fill</span>
+          <span className="vg-val">{captured.toFixed(1)}%</span>
+        </span>
+      </header>
+
+      {/* ── Arena: centered square; canvas + joystick overlay inside ── */}
+      <div
+        ref={arenaRef}
+        className="vg-arena"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
+      >
+        <canvas ref={canvasRef} className="vg-canvas" />
+
+        {joystickUi && (
+          <div className="vg-joystick-root">
+            <div
+              className="vg-joystick-base"
+              style={{ left: joystickUi.base.x, top: joystickUi.base.y }}
+            />
+            <div
+              className="vg-joystick-knob"
+              style={{ left: joystickUi.knob.x, top: joystickUi.knob.y }}
+            />
+          </div>
+        )}
       </div>
 
-      {joystickUi && (
-        <div className="joystick-root">
-          <div className="joystick-base" style={{ left: joystickUi.base.x, top: joystickUi.base.y }} />
-          <div className="joystick-knob" style={{ left: joystickUi.knob.x, top: joystickUi.knob.y }} />
-        </div>
-      )}
-
       <style jsx>{`
-        .voltgrid-shell { position: fixed; inset: 0; overflow: hidden; background: ${COLORS.deepSpace}; touch-action: none; user-select: none; }
-        .voltgrid-canvas { width: 100vw; height: 100vh; image-rendering: pixelated; image-rendering: crisp-edges; display: block; }
-        .hud { position: fixed; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; padding: 10px 14px; border: 1px solid rgba(0,255,255,0.4); border-radius: 14px; color: ${COLORS.white}; background: ${COLORS.hudBg}; font: 600 12px/1.3 system-ui; backdrop-filter: blur(6px); z-index: 4; flex-wrap: wrap; justify-content: center; }
-        .hud-top { top: env(safe-area-inset-top, 8px); }
-        .hud-bottom { bottom: calc(env(safe-area-inset-bottom, 0px) + 12px); width: min(96vw, 520px); }
-        .joystick-root { position: fixed; inset: 0; z-index: 5; pointer-events: none; }
-        .joystick-base, .joystick-knob { position: absolute; transform: translate(-50%, -50%); border-radius: 999px; }
-        .joystick-base { width: 96px; height: 96px; background: rgba(0,255,255,0.18); border: 2px solid rgba(0,255,255,0.45); }
-        .joystick-knob { width: 42px; height: 42px; background: rgba(255,0,255,0.65); border: 2px solid rgba(255,255,255,0.7); }
+        /* ── Page shell: dark void, vertical flex, everything centered ── */
+        .vg-page {
+          position: fixed;
+          inset: 0;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: env(safe-area-inset-top, 8px)
+                   env(safe-area-inset-right, 8px)
+                   env(safe-area-inset-bottom, 8px)
+                   env(safe-area-inset-left, 8px);
+          background: ${COLORS.deepSpace};
+          user-select: none;
+          overflow: hidden;
+          box-sizing: border-box;
+        }
+
+        /* ── HUD bar above the arena ── */
+        .vg-hud {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          flex-wrap: wrap;
+          gap: 4px 16px;
+          padding: 7px 16px;
+          width: min(100%, 800px);
+          box-sizing: border-box;
+          border: 1px solid rgba(0,255,255,0.35);
+          border-radius: 12px;
+          background: ${COLORS.hudBg};
+          backdrop-filter: blur(6px);
+          font: 600 11px/1.4 system-ui;
+          color: ${COLORS.white};
+          flex-shrink: 0;
+          z-index: 10;
+        }
+        .vg-stat { display: flex; align-items: center; gap: 4px; }
+        .vg-lbl  { opacity: 0.5; text-transform: uppercase; letter-spacing: 0.07em; font-size: 9px; }
+        .vg-val  { color: ${COLORS.cyan}; font-size: 12px; }
+
+        /* ── Square play arena: never wider than 800 px, never taller than
+              remaining viewport after the HUD (~72 px) ── */
+        .vg-arena {
+          position: relative;
+          width: min(calc(100vw - 16px), calc(100vh - 80px), 800px);
+          aspect-ratio: 1 / 1;
+          flex-shrink: 0;
+          border: 1px solid rgba(0,255,255,0.2);
+          border-radius: 4px;
+          overflow: hidden;
+          touch-action: none;
+        }
+
+        /* ── Canvas fills the arena box absolutely ── */
+        .vg-canvas {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          display: block;
+          image-rendering: pixelated;
+          image-rendering: crisp-edges;
+        }
+
+        /* ── Joystick overlay: sits over the canvas, same bounding box ── */
+        .vg-joystick-root {
+          position: absolute;
+          inset: 0;
+          pointer-events: none;
+          z-index: 5;
+        }
+        .vg-joystick-base,
+        .vg-joystick-knob {
+          position: absolute;
+          transform: translate(-50%, -50%);
+          border-radius: 999px;
+        }
+        .vg-joystick-base {
+          width: 96px;
+          height: 96px;
+          background: rgba(0,255,255,0.18);
+          border: 2px solid rgba(0,255,255,0.45);
+        }
+        .vg-joystick-knob {
+          width: 42px;
+          height: 42px;
+          background: rgba(255,0,255,0.65);
+          border: 2px solid rgba(255,255,255,0.7);
+        }
       `}</style>
-    </section>
+    </div>
   );
 }
