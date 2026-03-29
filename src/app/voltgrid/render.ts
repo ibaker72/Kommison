@@ -18,19 +18,19 @@ export const renderGame = (
   canvasHeight: number,
   time: number,
 ): void => {
-  const scale = Math.min(canvasWidth / ARENA_WIDTH, canvasHeight / ARENA_HEIGHT);
-  const offsetX = (canvasWidth - ARENA_WIDTH * scale) * 0.5;
-  const offsetY = (canvasHeight - ARENA_HEIGHT * scale) * 0.5;
+  const scaleX = canvasWidth / ARENA_WIDTH;
+  const scaleY = canvasHeight / ARENA_HEIGHT;
 
   ctx.save();
-  drawFullscreenBackdrop(ctx, canvasWidth, canvasHeight, time);
 
   const shake = state.shakeMs > 0 ? (state.shakeMs / 220) * 3 : 0;
   const sx = (Math.random() - 0.5) * shake;
   const sy = (Math.random() - 0.5) * shake;
 
-  ctx.translate(offsetX + sx, offsetY + sy);
-  ctx.scale(scale, scale);
+  ctx.translate(sx, sy);
+  ctx.scale(scaleX, scaleY);
+
+  drawArenaBackdrop(ctx, time);
 
   drawArena(ctx, time);
   drawCaptured(ctx, state.captured, time);
@@ -43,38 +43,38 @@ export const renderGame = (
   ctx.restore();
 };
 
-const drawFullscreenBackdrop = (ctx: CanvasRenderingContext2D, width: number, height: number, time: number): void => {
-  const g = ctx.createRadialGradient(width * 0.5, height * 0.5, 60, width * 0.5, height * 0.5, Math.max(width, height));
+const drawArenaBackdrop = (ctx: CanvasRenderingContext2D, time: number): void => {
+  const g = ctx.createRadialGradient(ARENA_WIDTH * 0.5, ARENA_HEIGHT * 0.5, 60, ARENA_WIDTH * 0.5, ARENA_HEIGHT * 0.5, Math.max(ARENA_WIDTH, ARENA_HEIGHT));
   g.addColorStop(0, '#0e1b42');
   g.addColorStop(0.55, '#070f28');
   g.addColorStop(1, '#030612');
   ctx.fillStyle = g;
-  ctx.fillRect(0, 0, width, height);
+  ctx.fillRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
 
-  const spacing = Math.max(22, Math.min(width, height) * 0.045);
+  const spacing = Math.max(22, Math.min(ARENA_WIDTH, ARENA_HEIGHT) * 0.045);
   const driftX = (time * 0.012) % spacing;
   const driftY = (time * 0.016) % spacing;
 
   ctx.strokeStyle = 'rgba(74, 196, 255, 0.09)';
   ctx.lineWidth = 1;
-  for (let x = -spacing + driftX; x < width + spacing; x += spacing) {
+  for (let x = -spacing + driftX; x < ARENA_WIDTH + spacing; x += spacing) {
     ctx.beginPath();
     ctx.moveTo(x, 0);
-    ctx.lineTo(x, height);
+    ctx.lineTo(x, ARENA_HEIGHT);
     ctx.stroke();
   }
-  for (let y = -spacing + driftY; y < height + spacing; y += spacing) {
+  for (let y = -spacing + driftY; y < ARENA_HEIGHT + spacing; y += spacing) {
     ctx.beginPath();
     ctx.moveTo(0, y);
-    ctx.lineTo(width, y);
+    ctx.lineTo(ARENA_WIDTH, y);
     ctx.stroke();
   }
 
-  const horizon = ctx.createLinearGradient(0, height * 0.58, 0, height);
+  const horizon = ctx.createLinearGradient(0, ARENA_HEIGHT * 0.58, 0, ARENA_HEIGHT);
   horizon.addColorStop(0, 'rgba(130, 90, 255, 0)');
   horizon.addColorStop(1, 'rgba(130, 90, 255, 0.14)');
   ctx.fillStyle = horizon;
-  ctx.fillRect(0, height * 0.58, width, height * 0.42);
+  ctx.fillRect(0, ARENA_HEIGHT * 0.58, ARENA_WIDTH, ARENA_HEIGHT * 0.42);
 };
 
 const drawArena = (ctx: CanvasRenderingContext2D, time: number): void => {
