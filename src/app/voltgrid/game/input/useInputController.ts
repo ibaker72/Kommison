@@ -88,7 +88,8 @@ export const useInputController = () => {
       event.preventDefault();
       reset();
     },
-    onPointerCancel: () => {
+    onPointerCancel: (event: React.PointerEvent) => {
+      event.preventDefault();
       reset();
     },
   }), [applyPointerDirection, reset]);
