@@ -25,13 +25,14 @@ export interface Orb {
   pos: Vec2;
   vel: Vec2;
   radius: number;
+  trail: Vec2[];
 }
 
-export interface TrailChaser {
-  distanceAlong: number;
-  pathLength: number;
-  pos: Vec2;
-  active: boolean;
+export interface Spark {
+  perimeterPos: number;
+  speed: number;
+  radius: number;
+  direction: 1 | -1;
 }
 
 export interface Particle {
@@ -47,10 +48,11 @@ export interface GameState {
   phase: GamePhase;
   player: Player;
   orbs: Orb[];
-  chaser: TrailChaser | null;
+  sparks: Spark[];
   captured: Uint8Array;
   capturedCount: number;
   revealPct: number;
+  score: number;
   shakeMs: number;
   particles: Particle[];
   statusText: string;
@@ -66,8 +68,7 @@ export interface InputState {
 
 export type GameEvent =
   | 'death-hit'
-  | 'trail-infected'
-  | 'safe-reconnect'
+  | 'trail-zapped'
   | 'capture'
   | 'win'
   | 'game-over';

@@ -5,15 +5,31 @@ import { useVoltGridGame } from './game/engine/useVoltGridGame';
 import { VoltGridBoard } from './game/view/VoltGridBoard';
 
 export default function VoltGrid() {
-  const { shellRef, hudRef, canvasRef, snapshot, muted, pointerHandlers, start, restart, toggleMuted, nextLevel, resume } = useVoltGridGame();
+  const {
+    shellRef,
+    hudRef,
+    canvasRef,
+    snapshot,
+    muted,
+    fullscreen,
+    pointerHandlers,
+    start,
+    restart,
+    toggleMuted,
+    toggleFullscreen,
+    nextLevel,
+    resume,
+  } = useVoltGridGame();
 
   return (
     <section ref={shellRef} className="voltgrid-shell text-cyan-100 select-none" style={{ touchAction: 'none', overscrollBehavior: 'none' }}>
       <VoltGridHud
         snapshot={snapshot}
         muted={muted}
+        fullscreen={fullscreen}
         onRestart={() => void restart()}
         onToggleMuted={toggleMuted}
+        onToggleFullscreen={toggleFullscreen}
         hudRef={hudRef}
       />
 

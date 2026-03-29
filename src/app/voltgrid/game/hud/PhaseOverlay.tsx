@@ -16,15 +16,15 @@ export const PhaseOverlay = ({ snapshot, onStart, onRestartRun, onNextLevel, onR
       <div className="w-full max-w-md rounded-2xl border border-cyan-300/25 bg-slate-950/84 p-6 md:p-8 shadow-[0_0_40px_rgba(81,255,226,0.25)]">
         <h2 className="mb-3 text-2xl font-bold tracking-wide text-cyan-200 md:text-3xl">
           {snapshot.flowPhase === 'intro' && 'VoltGrid'}
-          {snapshot.flowPhase === 'level-cleared' && 'Level Cleared'}
+          {snapshot.flowPhase === 'level-cleared' && 'Level Complete!'}
           {snapshot.flowPhase === 'campaign-won' && 'Campaign Complete'}
-          {snapshot.flowPhase === 'game-over' && 'System Overload'}
+          {snapshot.flowPhase === 'game-over' && 'Game Over'}
           {snapshot.phase === 'paused' && 'Paused'}
         </h2>
 
         <p className="mb-3 text-sm text-cyan-100/70">{snapshot.statusText}</p>
         <p className="mb-5 text-xs text-cyan-300/60">
-          Level {snapshot.levelIndex + 1}/{snapshot.levelCount} • Target {snapshot.targetPct}%
+          Level {snapshot.levelIndex + 1} • Target {snapshot.targetPct}% • Orbs {snapshot.orbCount} • Sparks {snapshot.sparkCount}
         </p>
 
         {snapshot.flowPhase === 'intro' && (

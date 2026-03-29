@@ -28,11 +28,8 @@ export class VoltGridAudio {
       case 'death-hit':
         this.tone(90, 0.2, 'sawtooth', 0.09, -180);
         break;
-      case 'trail-infected':
-        this.tone(260, 0.12, 'square', 0.05, -20);
-        break;
-      case 'safe-reconnect':
-        this.tone(620, 0.08, 'triangle', 0.04, 60);
+      case 'trail-zapped':
+        this.tone(280, 0.1, 'square', 0.05, -40);
         break;
       case 'capture':
         this.chime([420, 620], 0.05);

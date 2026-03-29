@@ -85,6 +85,13 @@ export const resolveOrbTrailCollision = (orb: Orb, trail: Vec2[]): TrailCollisio
   return best;
 };
 
+/**
+ * Rasterize the active player trail into a temporary binary grid mask.
+ *
+ * We oversample each segment so diagonals/fast movement cannot skip cells
+ * (classic Qix-clone glitch source). Any touched cell is treated as blocked
+ * during flood-fill, effectively turning the open trail into a closed wall.
+ */
 export const buildTrailBlockMask = (trail: Vec2[]): Uint8Array => {
   const mask = new Uint8Array(GRID_COLS * GRID_ROWS);
   if (trail.length < 2) return mask;
@@ -105,6 +112,16 @@ export const buildTrailBlockMask = (trail: Vec2[]): Uint8Array => {
   return mask;
 };
 
+/**
+ * Resolve capture on a discrete grid using a robust two-phase flood-fill:
+ *
+ * 1) Existing captured cells + new trail mask are marked blocked in `next`.
+ * 2) Multi-source BFS starts from every orb cell (the 'live' side of the split).
+ * 3) Any non-blocked, non-visited cell is enclosed and becomes captured.
+ *
+ * Because we flood from *all* orb seeds and use the trail mask as hard walls,
+ * this handles complex / overlapping paths without polygon winding math.
+ */
 export const applyCapture = (captured: Uint8Array, trail: Vec2[], orbPositions: Vec2[]): { next: Uint8Array; capturedDelta: number } => {
   const next = new Uint8Array(captured);
   const trailMask = buildTrailBlockMask(trail);

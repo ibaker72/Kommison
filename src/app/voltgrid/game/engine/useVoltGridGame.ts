@@ -24,6 +24,7 @@ export const useVoltGridGame = () => {
 
   const [snapshot, setSnapshot] = useState<FrameSnapshot>(() => frameSnapshotFromState(initialStore.state));
   const [muted, setMuted] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
 
   const syncSnapshot = useCallback(() => {
     setSnapshot(frameSnapshotFromState(storeRef.current.state));
@@ -69,11 +70,28 @@ export const useVoltGridGame = () => {
     syncSnapshot();
   }, [reset, syncSnapshot]);
 
+  const toggleFullscreen = useCallback(() => {
+    const target = shellRef.current;
+    if (!target) return;
+
+    if (!document.fullscreenElement) {
+      void target.requestFullscreen?.();
+    } else {
+      void document.exitFullscreen();
+    }
+  }, []);
+
   useEffect(() => {
     document.body.classList.add('voltgrid-body-lock');
     return () => {
       document.body.classList.remove('voltgrid-body-lock');
     };
+  }, []);
+
+  useEffect(() => {
+    const onFsChange = () => setFullscreen(Boolean(document.fullscreenElement));
+    document.addEventListener('fullscreenchange', onFsChange);
+    return () => document.removeEventListener('fullscreenchange', onFsChange);
   }, []);
 
   useEffect(() => {
@@ -167,10 +185,12 @@ export const useVoltGridGame = () => {
     board,
     snapshot,
     muted,
+    fullscreen,
     pointerHandlers,
     start,
     restart,
     toggleMuted,
+    toggleFullscreen,
     nextLevel,
     resume,
   };

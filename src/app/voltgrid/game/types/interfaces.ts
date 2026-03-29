@@ -23,10 +23,13 @@ export interface FrameSnapshot {
   flowPhase: 'intro' | 'playing' | 'level-cleared' | 'game-over' | 'campaign-won';
   levelIndex: number;
   levelLabel: string;
-  levelCount: number;
+  levelCount: number | null;
   lives: number;
   revealPct: number;
   targetPct: number;
+  score: number;
+  orbCount: number;
+  sparkCount: number;
   statusText: string;
 }
 
